@@ -69,16 +69,16 @@ const signUpEmailTemp = (data) => `
         <div class="logo">
           <img src="${process.env.EMAIL_TEMP_IMAGE}" alt="Logo" class="logo-img" />
         </div>
-        <h1>Welcome to BetWise Picks</h1>
+        <h1>Welcome to Dodawork</h1>
         <p>Hello, ${data.user}</p>
-        <p>Thank you for registering with BetWise Picks. To activate your account, please use the following activation code:</p>
+        <p>Thank you for registering with Dodawork. To activate your account, please use the following activation code:</p>
         <div class="code">${data.activationCode}</div>
         <p>Please enter this code on the activation page within the next <strong>${data.activationCodeExpire} minutes</strong>.</p>
-        <p>If you have any questions, please contact us at <a href="mailto:thakursaad613@gmail.com">thakursaad613@gmail.com</a>.</p>
-        <p>Thank you,<br>The BetWise Picks Team</p>
+        <p>If you have any questions, please contact us at <a href="mailto:arifishtiaque.sparktech@gmail.com">arifishtiaque.sparktech@gmail.com</a>.</p>
+        <p>Thank you,<br>The Dodawork Team</p>
       </div>
       <div class="footer">
-        <p>&copy; BetWise Picks - All Rights Reserved.</p>
+        <p>&copy; Dodawork - All Rights Reserved.</p>
         <p>
           <a href="https://yourwebsite.com/privacy">Privacy Policy</a> |
           <a href="https://yourwebsite.com/contact">Contact Support</a>

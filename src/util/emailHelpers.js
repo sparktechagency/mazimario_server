@@ -5,7 +5,7 @@ const resetPassEmailTemp = require("../mail/resetPassEmailTemp");
 const signUpEmailTemp = require("../mail/signUpEmailTemp");
 const { sendEmail } = require("./sendEmail");
 const addAdminEmailTemp = require("../mail/addAdminEmailTemp");
-const bookingEmailTemp = require("../mail/bookingEmailTemp");
+// const bookingEmailTemp = require("../mail/bookingEmailTemp");
 const subscriptionExpiredTemp = require("../mail/subscriptionExpiredTemp");
 
 const sendActivationEmail = async (email, data) => {
