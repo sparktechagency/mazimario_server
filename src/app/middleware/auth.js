@@ -25,15 +25,17 @@ const auth =
         const verifyUser = jwtHelpers.verifyToken(token, config.jwt.secret);
 
         req.user = verifyUser;
+        // console.log(verifyUser);
 
         const isExist = await Auth.findById(verifyUser?.authId);
         if (
-          verifyUser.role ===
-            Object.values(EnumUserRole).includes(verifyUser.role) &&
+          !Object.values(EnumUserRole).includes(verifyUser.role) ||
           !isExist
         ) {
           throw new ApiError(httpStatus.UNAUTHORIZED, "You are not authorized");
         }
+
+        // console.log(roles.length);
 
         if (roles.length && !roles.includes(verifyUser.role))
           throw new ApiError(

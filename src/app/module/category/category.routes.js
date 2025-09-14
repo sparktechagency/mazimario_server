@@ -18,54 +18,54 @@ router
 router
   .post(
     "/create",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     uploadFile({ name: "icon", maxCount: 1 }),
     CategoryController.createCategory
   )
   .get(
     "/get-all",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.getAllCategories
   )
   .get(
     "/get-by-id",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.getCategoryById
   )
   .patch(
     "/update",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     uploadFile({ name: "icon", maxCount: 1 }),
     CategoryController.updateCategory
   )
   .delete(
     "/delete",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.deleteCategory
   )
   .patch(
     "/toggle-status",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.toggleCategoryStatus
   )
   .post(
     "/add-subcategory",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.addSubcategory
   )
   .patch(
     "/update-subcategory",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.updateSubcategory
   )
   .delete(
     "/delete-subcategory",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.deleteSubcategory
   )
   .patch(
     "/toggle-subcategory-status",
-    auth([config.auth_level.admin, config.auth_level.super_admin]),
+    auth(config.auth_level.admin),
     CategoryController.toggleSubcategoryStatus
   );
 

@@ -10,7 +10,7 @@ const createCategory = async (req) => {
   const { files, body: data, user } = req;
   
   validateFields(data, ["name"]);
-  validateFields(files, ["icon"]); // Require both image and icon
+  validateFields(files, ["icon"]); 
 
   // Check if category already exists
   const existingCategory = await Category.findOne({ 
