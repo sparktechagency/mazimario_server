@@ -37,7 +37,7 @@ router
   )
   .get(
     "/get-profile-admin",
-    auth(config.auth_level.user),
+    auth(config.auth_level.admin),
     AdminController.getProfileAdmin
   )
   .patch(

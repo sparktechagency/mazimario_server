@@ -83,11 +83,11 @@ const otpResendTemp = (data) => `
         <p>
           If you did not request this code, please disregard this message. For assistance, reach out to us.
         </p>
-        <p>Thank you,<br>The BetWise Picks Team</p>
+        <p>Thank you,<br>The Dodawork Team</p>
       </div>
       <div class="footer">
-        <p>&copy; BetWise Picks - All Rights Reserved.</p>
-        <p>For support, contact us at <a href="mailto:support@company.com">support@company.com</a></p>
+        <p>&copy; Dodawork - All Rights Reserved.</p>
+        <p>For support, contact us at <a href="mailto:arifishtiaque.sparktech@gmail.com">arifishtiaque.sparktech@gmail.com</a></p>
       </div>
     </body>
   </html>

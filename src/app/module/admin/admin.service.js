@@ -23,12 +23,18 @@ const postAdmin = async (req) => {
   if (payload.password !== payload.confirmPassword)
     throw new ApiError(status.BAD_REQUEST, "Passwords do not match");
 
+  // Check if email already exists
+  const existingAuth = await Auth.findOne({ email: payload.email });
+  if (existingAuth) {
+    throw new ApiError(status.BAD_REQUEST, "Email already exists");
+  }
+
   const authData = {
     name: payload.name,
     email: payload.email,
     password: payload.password,
     role: EnumUserRole.ADMIN,
-    isActive: true,
+    isActive: true, // Admins created by super admin are activated immediately
   };
 
   const auth = await Auth.create(authData);
@@ -47,7 +53,9 @@ const postAdmin = async (req) => {
 
   EmailHelpers.sendAddAdminEmailTemp(payload.email, {
     password: payload.password,
-    ...admin.toObject(),
+    // ...admin.toObject(),
+    name: payload.name,
+    role: "Admin",
   });
 
   return admin;

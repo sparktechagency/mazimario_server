@@ -72,7 +72,7 @@ const addAdminEmailTemp = (data) =>
               <div class="logo">
                 <img src="${process.env.EMAIL_TEMP_IMAGE}" alt="Logo" class="logo-img" />
               </div>        
-              <h1>Welcome to BetWise Picks!</h1>
+              <h1>Welcome to Dodawork!</h1>
               <p>Hello, ${data.name},</p>
               <p>We are thrilled to welcome you as a new admin in our team. Below are your account details:</p>
               
@@ -95,13 +95,13 @@ const addAdminEmailTemp = (data) =>
                 </tr>
               </table>
     
-              <p>As an admin at BetWise Picks, you play a vital role in ensuring smooth and safe experience for our customers. Please log in to your account to get started.</p>
-              <p>If you have any questions or need any assistance, feel free to reach out to us at <a href="mailto:thakursaad613@gmail.com">thakursaad613@gmail.com</a>.</p>
+              <p>As an admin at Dodawork, you play a vital role in ensuring smooth and safe experience for our customers. Please log in to your account to get started.</p>
+              <p>If you have any questions or need any assistance, feel free to reach out to us at <a href="mailto:arifishtiaque.sparktech@gmail.com">arifishtiaque.sparktech@gmail.com</a>.</p>
               <p>We look forward to working with you and wish you a great journey with us!</p>
-              <p>Best regards,<br>The BetWise Picks Team</p>
+              <p>Best regards,<br>The Dodawork Team</p>
             </div>
             <div class="footer">
-              <p>&copy; BetWise Picks - All Rights Reserved.</p>
+              <p>&copy; Dodawork - All Rights Reserved.</p>
               <p><a href="https://yourwebsite.com/privacy">Privacy Policy</a> | <a href="https://yourwebsite.com/contact">Contact Support</a></p>
             </div>
           </body>

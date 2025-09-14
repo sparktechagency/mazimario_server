@@ -7,7 +7,7 @@ const QueryBuilder = require("../../../builder/queryBuilder");
 
 const createServiceRequest = async (req) => {
   const { files, body: data, user } = req;
-  
+
   validateFields(data, [
     "serviceCategory",
     "subcategory",
@@ -16,13 +16,18 @@ const createServiceRequest = async (req) => {
     "startTime",
     "endTime",
     "address",
-    "customerPhone"
+    "latitude",
+    "longitude",
+    "customerPhone",
   ]);
 
   // Check if phone is verified
   const auth = await Auth.findById(user.authId);
   if (!auth.isPhoneVerified) {
-    throw new ApiError(status.FORBIDDEN, "Phone number must be verified to create service request");
+    throw new ApiError(
+      status.FORBIDDEN,
+      "Phone number must be verified to create service request"
+    );
   }
 
   const serviceRequestData = {
@@ -37,11 +42,13 @@ const createServiceRequest = async (req) => {
     endTime: data.endTime,
     address: data.address,
     description: data.description,
+    latitude: data.latitude,
+    longitude: data.longitude,
   };
 
   // Handle file uploads
   if (files && files.attachments) {
-    serviceRequestData.attachments = files.attachments.map(file => file.path);
+    serviceRequestData.attachments = files.attachments.map((file) => file.path);
   }
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);
@@ -64,6 +71,7 @@ const getServiceRequests = async (userData, query) => {
       .populate("serviceCategory")
       .populate("subcategory")
       .populate("assignedProvider")
+      .populate("customerId")
       .lean(),
     query
   )
@@ -128,7 +136,8 @@ const assignProviderToRequest = async (userData, payload) => {
   )
     .populate("serviceCategory")
     .populate("subcategory")
-    .populate("assignedProvider");
+    .populate("assignedProvider")
+    .populate("customerId");
 
   if (!serviceRequest) {
     throw new ApiError(status.NOT_FOUND, "Service request not found");

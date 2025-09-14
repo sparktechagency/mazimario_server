@@ -31,10 +31,43 @@ const deleteMyAccount = catchAsync(async (req, res) => {
   });
 });
 
+const createSuperAdmin = catchAsync(async (req, res) => {
+  const result = await SuperAdminService.createSuperAdmin(req);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Super Admin created successfully",
+    data: result,
+  });
+});
+
+const createInitialSuperAdmin = catchAsync(async (req, res) => {
+  const result = await SuperAdminService.createInitialSuperAdmin(req.body);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Initial Super Admin created successfully",
+    data: result,
+  });
+});
+
+const getAllSuperAdmins = catchAsync(async (req, res) => {
+  const result = await SuperAdminService.getAllSuperAdmins(req.user, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Super Admins retrieved successfully",
+    data: result,
+  });
+});
+
 const SuperAdminController = {
   updateProfile,
   getProfile,
   deleteMyAccount,
+  createSuperAdmin,
+  createInitialSuperAdmin,
+  getAllSuperAdmins,
 };
 
 module.exports = { SuperAdminController };

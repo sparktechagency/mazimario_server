@@ -5,6 +5,7 @@ const AdminRoutes = require("../module/admin/admin.routes");
 const SuperAdminRoutes = require("../module/superAdmin/superAdmin.routes");
 const UserRoutes = require("../module/user/user.routes");
 const ServiceRequestRoutes = require("../module/serviceRequest/serviceRequest.routes");
+const CategoryRoutes = require("../module/category/category.routes");
 // const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes");
 // const DashboardRoutes = require("../module/dashboard/dashboard.routes");
 // const ManageRoutes = require("../module/manage/manage.routes");
@@ -36,6 +37,10 @@ const moduleRoutes = [
     path: "/service-requests",
     route: ServiceRequestRoutes,
   },
+  {
+    path: "/category",
+    route: CategoryRoutes,
+  }
   // {
   //   path: "/phone-verification",
   //   route: PhoneVerificationRoutes,

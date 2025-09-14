@@ -1,7 +1,22 @@
 const multer = require("multer");
 const fs = require("fs");
 
-const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+const allowedMimeTypes = [
+  // Image types
+  "image/jpeg", 
+  "image/png", 
+  "image/jpg", 
+  "image/webp",
+  // Video types
+  "video/mp4",
+  "video/avi",
+  "video/mov",
+  "video/wmv",
+  "video/flv",
+  "video/webm",
+  "video/mkv",
+  "video/3gp"
+];
 
 const isValidFileType = (mimetype) => allowedMimeTypes.includes(mimetype);
 
@@ -35,7 +50,7 @@ const uploadFile = () => {
   });
 
   const fileFilter = (req, file, cb) => {
-    const allowedFieldNames = ["profile_image", "post_image"];
+    const allowedFieldNames = ["profile_image", "post_image", "attachments"];
 
     // Allow requests without files (when there's no fieldname)
     if (!file.fieldname) return cb(null, true);
@@ -52,9 +67,13 @@ const uploadFile = () => {
   const upload = multer({
     storage: storage,
     fileFilter: fileFilter,
+    limits: {
+      fileSize: 50 * 1024 * 1024, // 50MB limit for attachments (videos can be large)
+    },
   }).fields([
     { name: "profile_image", maxCount: 1 },
     { name: "post_image", maxCount: 1 },
+    { name: "attachments", maxCount: 5 },
   ]);
 
   return upload;

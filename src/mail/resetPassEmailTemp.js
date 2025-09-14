@@ -86,10 +86,10 @@ const resetPassEmailTemp = (data) => `
         <p>
           If you did not request a password reset, please disregard this email or contact support.
         </p>
-        <p>Thank you,<br>The BetWise Picks Team</p>
+        <p>Thank you,<br>The Dodawork Team</p>
       </div>
       <div class="footer">
-        <p>&copy; ${new Date().getFullYear()} BetWise Picks - All Rights Reserved.</p>
+        <p>&copy; ${new Date().getFullYear()} Dodawork - All Rights Reserved.</p>
         <p>
           <a href="https://yourwebsite.com/privacy">Privacy Policy</a> |
           <a href="https://yourwebsite.com/contact">Contact Support</a>

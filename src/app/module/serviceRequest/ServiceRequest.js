@@ -17,17 +17,17 @@ const ServiceRequestSchema = new Schema(
     serviceCategory: {
       type: ObjectId,
       ref: "Category",
-      required: true,
+    //   required: true,
     },
     subcategory: {
       type: ObjectId,
       ref: "Subcategory",
-      required: true,
+    //   required: true,
     },
     priority: {
       type: String,
-      enum: ["Low", "Medium", "High", "Urgent"],
-      default: "Medium",
+      enum: ["Low", "Normal", "Urgent"],
+      default: "Normal",
     },
     startDate: {
       type: Date,
@@ -49,6 +49,12 @@ const ServiceRequestSchema = new Schema(
       type: String,
       required: true,
     },
+    latitude: {
+      type: String,
+    },
+    longitude: {
+      type: String,
+    },
     description: {
       type: String,
     },
@@ -57,8 +63,8 @@ const ServiceRequestSchema = new Schema(
     }],
     status: {
       type: String,
-      enum: ["Pending", "Processing", "Ongoing", "Completed", "Cancelled"],
-      default: "Pending",
+      enum: ["PENDING", "PROCESSING", "ONGOING", "COMPLETED", "CANCELLED"],
+      default: "PENDING",
     },
     assignedProvider: {
       type: ObjectId,
