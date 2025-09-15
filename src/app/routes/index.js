@@ -8,7 +8,7 @@ const ServiceRequestRoutes = require("../module/serviceRequest/serviceRequest.ro
 const CategoryRoutes = require("../module/category/category.routes");
 // const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes");
 // const DashboardRoutes = require("../module/dashboard/dashboard.routes");
-// const ManageRoutes = require("../module/manage/manage.routes");
+const ManageRoutes = require("../module/manage/manage.routes");
 // const NotificationRoutes = require("../module/notification/notification.routes");
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
 // const ReviewRoutes = require("../module/review/review.routes");
@@ -40,7 +40,7 @@ const moduleRoutes = [
   {
     path: "/category",
     route: CategoryRoutes,
-  }
+  },
   // {
   //   path: "/phone-verification",
   //   route: PhoneVerificationRoutes,
@@ -49,10 +49,10 @@ const moduleRoutes = [
   //   path: "/dashboard",
   //   route: DashboardRoutes,
   // },
-  // {
-  //   path: "/manage",
-  //   route: ManageRoutes,
-  // },
+  {
+    path: "/manage",
+    route: ManageRoutes,
+  },
   // {
   //   path: "/notification",
   //   route: NotificationRoutes,

@@ -88,6 +88,10 @@ const getServiceRequests = async (userData, query) => {
     filter.assignedProvider = userId;
   }
 
+  if (query.status) {
+    filter.status = query.status;
+  }
+
   const serviceRequestQuery = new QueryBuilder(
     ServiceRequest.find(filter)
       .populate("serviceCategory", "name icon") // Only populate needed fields
