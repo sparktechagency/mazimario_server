@@ -18,8 +18,12 @@ router
     "/my-requests",
     auth(config.auth_level.user),
     ServiceRequestController.getServiceRequests
-  );
-
+  )
+  .get(
+    "/get-by-id",
+    auth(config.auth_level.user),
+    ServiceRequestController.getServiceRequestById
+  )
 // Provider routes
 router
   .get(

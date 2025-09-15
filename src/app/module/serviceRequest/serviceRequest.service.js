@@ -1,5 +1,6 @@
 const { default: status } = require("http-status");
 const ServiceRequest = require("./ServiceRequest");
+const Category = require("../category/Category"); // Add this import
 const Auth = require("../auth/Auth");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
@@ -30,12 +31,34 @@ const createServiceRequest = async (req) => {
     );
   }
 
+  // Validate that category exists and is active
+  const category = await Category.findOne({
+    _id: data.serviceCategory,
+    isActive: true
+  });
+  if (!category) {
+    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive category");
+  }
+
+  // Validate that subcategory exists, is active, and belongs to the category
+  const subcategoryExists = category.subcategories.some(
+    sub => sub._id.toString() === data.subcategory && sub.isActive
+  );
+  if (!subcategoryExists) {
+    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive subcategory");
+  }
+
+  // Get the subcategory name for storage
+  const selectedSubcategory = category.subcategories.find(
+    sub => sub._id.toString() === data.subcategory
+  );
+
   const serviceRequestData = {
     customerId: user.userId,
     customerPhone: data.customerPhone,
     serviceCategory: data.serviceCategory,
-    subcategory: data.subcategory,
-    priority: data.priority || "Medium",
+    subcategory: selectedSubcategory.name, // Store the name instead of ID
+    priority: data.priority || "Normal",
     startDate: data.startDate,
     endDate: data.endDate,
     startTime: data.startTime,
@@ -52,8 +75,7 @@ const createServiceRequest = async (req) => {
   }
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);
-
-  return serviceRequest;
+  return await serviceRequest.populate("serviceCategory", "name icon");
 };
 
 const getServiceRequests = async (userData, query) => {
@@ -68,10 +90,9 @@ const getServiceRequests = async (userData, query) => {
 
   const serviceRequestQuery = new QueryBuilder(
     ServiceRequest.find(filter)
-      .populate("serviceCategory")
-      .populate("subcategory")
-      .populate("assignedProvider")
-      .populate("customerId")
+      .populate("serviceCategory", "name icon") // Only populate needed fields
+      .populate("assignedProvider", "companyName contactPerson")
+      .populate("customerId", "name email phoneNumber")
       .lean(),
     query
   )
@@ -95,10 +116,9 @@ const getServiceRequestById = async (query) => {
   validateFields(query, ["requestId"]);
 
   const serviceRequest = await ServiceRequest.findById(query.requestId)
-    .populate("serviceCategory")
-    .populate("subcategory")
-    .populate("assignedProvider")
-    .populate("customerId")
+    .populate("serviceCategory", "name icon")
+    .populate("assignedProvider", "companyName contactPerson phoneNumber")
+    .populate("customerId", "name email phoneNumber address")
     .lean();
 
   if (!serviceRequest) {
@@ -115,9 +135,7 @@ const updateServiceRequestStatus = async (userData, payload) => {
     payload.requestId,
     { status: payload.status },
     { new: true, runValidators: true }
-  )
-    .populate("serviceCategory")
-    .populate("subcategory");
+  ).populate("serviceCategory", "name icon");
 
   if (!serviceRequest) {
     throw new ApiError(status.NOT_FOUND, "Service request not found");
@@ -131,13 +149,12 @@ const assignProviderToRequest = async (userData, payload) => {
 
   const serviceRequest = await ServiceRequest.findByIdAndUpdate(
     payload.requestId,
-    { assignedProvider: payload.providerId, status: "Processing" },
+    { assignedProvider: payload.providerId, status: "PROCESSING" },
     { new: true, runValidators: true }
   )
-    .populate("serviceCategory")
-    .populate("subcategory")
-    .populate("assignedProvider")
-    .populate("customerId");
+    .populate("serviceCategory", "name icon")
+    .populate("assignedProvider", "companyName contactPerson phoneNumber")
+    .populate("customerId", "name email phoneNumber");
 
   if (!serviceRequest) {
     throw new ApiError(status.NOT_FOUND, "Service request not found");

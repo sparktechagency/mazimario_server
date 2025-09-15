@@ -17,12 +17,11 @@ const ServiceRequestSchema = new Schema(
     serviceCategory: {
       type: ObjectId,
       ref: "Category",
-    //   required: true,
+      required: true,
     },
     subcategory: {
-      type: ObjectId,
-      ref: "Subcategory",
-    //   required: true,
+      type: String, // Changed from ObjectId ref to String
+      required: true,
     },
     priority: {
       type: String,
