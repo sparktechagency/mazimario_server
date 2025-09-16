@@ -27,43 +27,13 @@ const updateProviderProfile = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "Provider profile updated successfully",
+    message: "Update request submitted for admin approval",
     data: result,
   });
 });
 
-const getAllProviders = catchAsync(async (req, res) => {
-  const result = await ProviderService.getAllProviders(req.user, req.query);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Providers retrieved successfully",
-    data: result,
-  });
-});
-
-const getProviderById = catchAsync(async (req, res) => {
-  const result = await ProviderService.getProviderById(req.query);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Provider retrieved successfully",
-    data: result,
-  });
-});
-
-const updateProviderVerification = catchAsync(async (req, res) => {
-  const result = await ProviderService.updateProviderVerification(req.user, req.body);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Provider verification updated successfully",
-    data: result,
-  });
-});
-
-const updateProviderStatus = catchAsync(async (req, res) => {
-  const result = await ProviderService.updateProviderStatus(req.user, req.body);
+const toggleProviderStatus = catchAsync(async (req, res) => {
+  const result = await ProviderService.toggleProviderStatus(req.user, req.body);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -72,18 +42,38 @@ const updateProviderStatus = catchAsync(async (req, res) => {
   });
 });
 
-const deleteProvider = catchAsync(async (req, res) => {
-  const result = await ProviderService.deleteProvider(req.user, req.body);
+const getPotentialRequests = catchAsync(async (req, res) => {
+  const result = await ProviderService.getPotentialRequests(req.user, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "Provider deleted successfully",
+    message: "Potential requests retrieved successfully",
     data: result,
   });
 });
 
-const getProvidersByCategory = catchAsync(async (req, res) => {
-  const result = await ProviderService.getProvidersByCategory(req.query);
+const handleRequestResponse = catchAsync(async (req, res) => {
+  const result = await ProviderService.handleRequestResponse(req.user, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Request response handled successfully",
+    data: result,
+  });
+});
+
+const markRequestComplete = catchAsync(async (req, res) => {
+  const result = await ProviderService.markRequestComplete(req);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Request marked as completed successfully",
+    data: result,
+  });
+});
+
+const getAllProviders = catchAsync(async (req, res) => {
+  const result = await ProviderService.getAllProviders(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -96,12 +86,11 @@ const ProviderController = {
   registerProvider,
   getProviderProfile,
   updateProviderProfile,
+  toggleProviderStatus,
+  getPotentialRequests,
+  handleRequestResponse,
+  markRequestComplete,
   getAllProviders,
-  getProviderById,
-  updateProviderVerification,
-  updateProviderStatus,
-  deleteProvider,
-  getProvidersByCategory,
 };
 
 module.exports = { ProviderController };

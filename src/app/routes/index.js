@@ -9,6 +9,7 @@ const CategoryRoutes = require("../module/category/category.routes");
 // const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes");
 // const DashboardRoutes = require("../module/dashboard/dashboard.routes");
 const ManageRoutes = require("../module/manage/manage.routes");
+const ProviderRoutes = require("../module/provider/provider.routes")
 // const NotificationRoutes = require("../module/notification/notification.routes");
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
 // const ReviewRoutes = require("../module/review/review.routes");
@@ -40,6 +41,10 @@ const moduleRoutes = [
   {
     path: "/category",
     route: CategoryRoutes,
+  },
+  {
+    path: "/provider", 
+    route: ProviderRoutes
   },
   // {
   //   path: "/phone-verification",

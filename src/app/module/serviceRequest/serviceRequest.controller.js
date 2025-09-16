@@ -32,6 +32,16 @@ const getServiceRequestById = catchAsync(async (req, res) => {
   });
 });
 
+const getServiceRequestByIdDetails = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.getServiceRequestByIdDetails(req.user, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Service request details retrieved successfully",
+    data: result,
+  });
+});
+
 const updateServiceRequestStatus = catchAsync(async (req, res) => {
   const result = await ServiceRequestService.updateServiceRequestStatus(req.user, req.body);
   sendResponse(res, {
@@ -56,6 +66,7 @@ const ServiceRequestController = {
   createServiceRequest,
   getServiceRequests,
   getServiceRequestById,
+  getServiceRequestByIdDetails,
   updateServiceRequestStatus,
   assignProviderToRequest,
 };

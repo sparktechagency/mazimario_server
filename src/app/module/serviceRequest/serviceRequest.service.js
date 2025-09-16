@@ -1,10 +1,62 @@
 const { default: status } = require("http-status");
 const ServiceRequest = require("./ServiceRequest");
-const Category = require("../category/Category"); // Add this import
+const Category = require("../category/Category");
 const Auth = require("../auth/Auth");
+const Provider = require("../provider/Provider");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const QueryBuilder = require("../../../builder/queryBuilder");
+
+// Helper function to calculate distance
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c;
+};
+
+const deg2rad = (deg) => deg * (Math.PI/180);
+
+// Find matching providers
+const findMatchingProviders = async (serviceRequestData) => {
+  const { serviceCategory, subcategory, latitude, longitude } = serviceRequestData;
+
+  const matchingProviders = await Provider.find({
+    serviceCategory,
+    subcategory,
+    isActive: true,
+    isVerified: true,
+  }).select("_id coveredRadius latitude longitude workingHours");
+
+  const eligibleProviders = [];
+  const userLat = parseFloat(latitude);
+  const userLon = parseFloat(longitude);
+
+  for (const provider of matchingProviders) {
+    // Check distance
+    const distance = calculateDistance(
+      userLat,
+      userLon,
+      provider.latitude,
+      provider.longitude
+    );
+    
+    if (distance <= 50 && distance <= provider.coveredRadius) {
+      // Check availability (simplified - you might want to check specific date/time)
+      const hasAvailability = provider.workingHours.some(wh => wh.isAvailable);
+      if (hasAvailability) {
+        eligibleProviders.push(provider._id);
+      }
+    }
+  }
+
+  return eligibleProviders;
+};
 
 const createServiceRequest = async (req) => {
   const { files, body: data, user } = req;
@@ -22,33 +74,26 @@ const createServiceRequest = async (req) => {
     "customerPhone",
   ]);
 
-  // Check if phone is verified
   const auth = await Auth.findById(user.authId);
   if (!auth.isPhoneVerified) {
-    throw new ApiError(
-      status.FORBIDDEN,
-      "Phone number must be verified to create service request"
-    );
+    throw new ApiError(status.FORBIDDEN, "Phone number must be verified");
   }
 
-  // Validate that category exists and is active
   const category = await Category.findOne({
     _id: data.serviceCategory,
     isActive: true
   });
   if (!category) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive category");
+    throw new ApiError(status.BAD_REQUEST, "Invalid category");
   }
 
-  // Validate that subcategory exists, is active, and belongs to the category
   const subcategoryExists = category.subcategories.some(
     sub => sub._id.toString() === data.subcategory && sub.isActive
   );
   if (!subcategoryExists) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive subcategory");
+    throw new ApiError(status.BAD_REQUEST, "Invalid subcategory");
   }
 
-  // Get the subcategory name for storage
   const selectedSubcategory = category.subcategories.find(
     sub => sub._id.toString() === data.subcategory
   );
@@ -57,7 +102,7 @@ const createServiceRequest = async (req) => {
     customerId: user.userId,
     customerPhone: data.customerPhone,
     serviceCategory: data.serviceCategory,
-    subcategory: selectedSubcategory.name, // Store the name instead of ID
+    subcategory: selectedSubcategory.name,
     priority: data.priority || "Normal",
     startDate: data.startDate,
     endDate: data.endDate,
@@ -65,16 +110,24 @@ const createServiceRequest = async (req) => {
     endTime: data.endTime,
     address: data.address,
     description: data.description,
-    latitude: data.latitude,
-    longitude: data.longitude,
+    latitude: parseFloat(data.latitude),
+    longitude: parseFloat(data.longitude),
   };
 
-  // Handle file uploads
   if (files && files.attachments) {
     serviceRequestData.attachments = files.attachments.map((file) => file.path);
   }
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);
+
+  // Find and assign matching providers
+  const matchingProviderIds = await findMatchingProviders(serviceRequestData);
+  serviceRequest.potentialProviders = matchingProviderIds.map(providerId => ({
+    providerId,
+    status: "PENDING",
+  }));
+
+  await serviceRequest.save();
   return await serviceRequest.populate("serviceCategory", "name icon");
 };
 
@@ -94,9 +147,10 @@ const getServiceRequests = async (userData, query) => {
 
   const serviceRequestQuery = new QueryBuilder(
     ServiceRequest.find(filter)
-      .populate("serviceCategory", "name icon") // Only populate needed fields
+      .populate("serviceCategory", "name icon")
       .populate("assignedProvider", "companyName contactPerson")
       .populate("customerId", "name email phoneNumber")
+      .populate("potentialProviders.providerId", "companyName contactPerson")
       .lean(),
     query
   )
@@ -110,16 +164,39 @@ const getServiceRequests = async (userData, query) => {
     serviceRequestQuery.countTotal(),
   ]);
 
-  return {
-    meta,
-    requests,
-  };
+  return { meta, requests };
 };
 
 const getServiceRequestById = async (query) => {
   validateFields(query, ["requestId"]);
 
   const serviceRequest = await ServiceRequest.findById(query.requestId)
+    .populate("serviceCategory", "name icon")
+    .populate("assignedProvider", "companyName contactPerson phoneNumber")
+    .populate("customerId", "name email phoneNumber address")
+    .populate("potentialProviders.providerId", "companyName contactPerson")
+    .lean();
+
+  if (!serviceRequest) {
+    throw new ApiError(status.NOT_FOUND, "Service request not found");
+  }
+
+  return serviceRequest;
+};
+
+const getServiceRequestByIdDetails = async (userData, query) => {
+  validateFields(query, ["requestId"]);
+
+  const { userId, role } = userData;
+  let filter = { _id: query.requestId };
+
+  if (role === "user") {
+    filter.customerId = userId;
+  } else if (role === "provider") {
+    filter.assignedProvider = userId;
+  }
+
+  const serviceRequest = await ServiceRequest.findOne(filter)
     .populate("serviceCategory", "name icon")
     .populate("assignedProvider", "companyName contactPerson phoneNumber")
     .populate("customerId", "name email phoneNumber address")
@@ -153,7 +230,10 @@ const assignProviderToRequest = async (userData, payload) => {
 
   const serviceRequest = await ServiceRequest.findByIdAndUpdate(
     payload.requestId,
-    { assignedProvider: payload.providerId, status: "PROCESSING" },
+    { 
+      assignedProvider: payload.providerId, 
+      status: "ASSIGNED" 
+    },
     { new: true, runValidators: true }
   )
     .populate("serviceCategory", "name icon")
@@ -171,6 +251,7 @@ const ServiceRequestService = {
   createServiceRequest,
   getServiceRequests,
   getServiceRequestById,
+  getServiceRequestByIdDetails,
   updateServiceRequestStatus,
   assignProviderToRequest,
 };

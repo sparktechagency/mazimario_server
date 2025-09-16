@@ -20,7 +20,7 @@ const ServiceRequestSchema = new Schema(
       required: true,
     },
     subcategory: {
-      type: String, // Changed from ObjectId ref to String
+      type: String,
       required: true,
     },
     priority: {
@@ -49,29 +49,68 @@ const ServiceRequestSchema = new Schema(
       required: true,
     },
     latitude: {
-      type: String,
+      type: Number,
+      required: true,
     },
     longitude: {
-      type: String,
+      type: Number,
+      required: true,
     },
     description: {
       type: String,
     },
     attachments: [{
-      type: String, // file paths
+      type: String,
     }],
     status: {
       type: String,
-      enum: ["PENDING", "PROCESSING", "ONGOING", "COMPLETED", "CANCELLED"],
+      enum: ["PENDING", "PROCESSING", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "PAYMENT_PENDING"],
       default: "PENDING",
     },
     assignedProvider: {
       type: ObjectId,
       ref: "Provider",
     },
+    potentialProviders: [{
+      providerId: {
+        type: ObjectId,
+        ref: "Provider",
+      },
+      status: {
+        type: String,
+        enum: ["PENDING", "ACCEPTED", "DECLINED", "PAID"],
+        default: "PENDING",
+      },
+      acceptedAt: Date,
+      declinedAt: Date,
+      paidAt: Date,
+    }],
     requestId: {
       type: String,
       unique: true,
+    },
+    leadFee: {
+      type: Number,
+      default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["PENDING", "COMPLETED", "FAILED"],
+      default: "PENDING",
+    },
+    completionProof: [{
+      type: String,
+    }],
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+    review: {
+      type: String,
+    },
+    reviewedAt: {
+      type: Date,
     },
   },
   {
@@ -79,7 +118,6 @@ const ServiceRequestSchema = new Schema(
   }
 );
 
-// Generate request ID before saving
 ServiceRequestSchema.pre("save", async function (next) {
   if (this.isNew) {
     const count = await this.constructor.countDocuments();
@@ -89,5 +127,4 @@ ServiceRequestSchema.pre("save", async function (next) {
 });
 
 const ServiceRequest = model("ServiceRequest", ServiceRequestSchema);
-
 module.exports = ServiceRequest;

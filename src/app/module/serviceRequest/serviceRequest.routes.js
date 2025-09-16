@@ -24,12 +24,23 @@ router
     auth(config.auth_level.user),
     ServiceRequestController.getServiceRequestById
   )
+  .get(
+    "/details",
+    auth(config.auth_level.user),
+    ServiceRequestController.getServiceRequestByIdDetails
+  );
+
 // Provider routes
 router
   .get(
     "/assigned-requests",
     auth(config.auth_level.provider),
     ServiceRequestController.getServiceRequests
+  )
+  .get(
+    "/details",
+    auth(config.auth_level.provider),
+    ServiceRequestController.getServiceRequestByIdDetails
   )
   .patch(
     "/update-status",

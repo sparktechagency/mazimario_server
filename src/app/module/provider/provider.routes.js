@@ -6,12 +6,15 @@ const config = require("../../../config");
 
 const router = express.Router();
 
-// Provider routes (requires provider authentication)
+// Provider routes
 router
   .post(
     "/register",
     auth(config.auth_level.user),
-    uploadFile([{ name: "licenses", maxCount: 5 }, { name: "certificates", maxCount: 5 }]),
+    uploadFile([
+      { name: "licenses", maxCount: 5 },
+      { name: "certificates", maxCount: 5 }
+    ]),
     ProviderController.registerProvider
   )
   .get(
@@ -22,42 +25,40 @@ router
   .patch(
     "/update-profile",
     auth(config.auth_level.provider),
-    uploadFile([{ name: "licenses", maxCount: 5 }, { name: "certificates", maxCount: 5 }]),
+    uploadFile([
+      { name: "licenses", maxCount: 5 },
+      { name: "certificates", maxCount: 5 }
+    ]),
     ProviderController.updateProviderProfile
+  )
+  .patch(
+    "/toggle-status",
+    auth(config.auth_level.provider),
+    ProviderController.toggleProviderStatus
+  )
+  .get(
+    "/potential-requests",
+    auth(config.auth_level.provider),
+    ProviderController.getPotentialRequests
+  )
+  .patch(
+    "/handle-request",
+    auth(config.auth_level.provider),
+    ProviderController.handleRequestResponse
+  )
+  .patch(
+    "/mark-complete",
+    auth(config.auth_level.provider),
+    uploadFile([{ name: "completionProof", maxCount: 5 }]),
+    ProviderController.markRequestComplete
   );
 
-// Admin routes (requires admin authentication)
+// Admin routes
 router
   .get(
     "/get-all",
     auth(config.auth_level.admin),
     ProviderController.getAllProviders
-  )
-  .get(
-    "/get-by-id",
-    auth(config.auth_level.admin),
-    ProviderController.getProviderById
-  )
-  .patch(
-    "/update-verification",
-    auth(config.auth_level.admin),
-    ProviderController.updateProviderVerification
-  )
-  .patch(
-    "/update-status",
-    auth(config.auth_level.admin),
-    ProviderController.updateProviderStatus
-  )
-  .delete(
-    "/delete",
-    auth(config.auth_level.admin),
-    ProviderController.deleteProvider
   );
-
-// Public routes (no authentication required)
-router.get(
-  "/by-category",
-  ProviderController.getProvidersByCategory
-);
 
 module.exports = router;
