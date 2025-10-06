@@ -13,7 +13,7 @@ router
     uploadFile(),
     AdminController.postAdmin
   )
-  .get("/get-admin", auth(config.auth_level.user), AdminController.getAdmin)
+  .get("/get-admin", auth(config.auth_level.admin), AdminController.getAdmin)
   .get(
     "/get-all-admins",
     auth(config.auth_level.super_admin),

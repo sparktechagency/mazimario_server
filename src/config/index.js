@@ -57,6 +57,8 @@ const config = {
   },
 };
 
+// console.log(config)
+
 // Validate configuration
 validateConfig(config);
 

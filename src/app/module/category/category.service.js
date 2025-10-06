@@ -131,9 +131,12 @@ const updateCategory = async (req) => {
 
 // Delete Category
 const deleteCategory = async (payload) => {
-  validateFields(payload, ["categoryId"]);
+  // const {categoryId} = req.params.id;
+  // validateFields(payload, ["categoryId"]);
+  const {categoryId} = payload;
+  // console.log(categoryId);
 
-  const category = await Category.findById(payload.categoryId);
+  const category = await Category.findById(categoryId);
   if (!category) {
     throw new ApiError(status.NOT_FOUND, "Category not found");
   }
@@ -237,25 +240,29 @@ const updateSubcategory = async (req) => {
 
 // Delete Subcategory
 const deleteSubcategory = async (payload) => {
-  validateFields(payload, ["categoryId", "subcategoryId"]);
+  const { categoryId, subcategoryId } = payload;
 
-  const category = await Category.findById(payload.categoryId);
+  const category = await Category.findById(categoryId);
   if (!category) {
-    throw new ApiError(status.NOT_FOUND, "Category not found");
+    throw new ApiError(status.NOT_FOUND, 'Category not found');
   }
 
   const subcategoryIndex = category.subcategories.findIndex(
-    sub => sub._id.toString() === payload.subcategoryId
+    sub => sub._id.toString() === subcategoryId
   );
   
   if (subcategoryIndex === -1) {
-    throw new ApiError(status.NOT_FOUND, "Subcategory not found");
+    throw new ApiError(status.NOT_FOUND, 'Subcategory not found in the specified category');
   }
 
+  // Remove the subcategory
   category.subcategories.splice(subcategoryIndex, 1);
   await category.save();
 
-  return { message: "Subcategory deleted successfully" };
+  // Return the updated category
+  return await Category.findById(categoryId)
+    .populate("createdBy", "name email")
+    .populate("updatedBy", "name email");
 };
 
 // Toggle Subcategory Status

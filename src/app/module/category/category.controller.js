@@ -48,7 +48,8 @@ const updateCategory = catchAsync(async (req, res) => {
 
 // Delete Category
 const deleteCategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.deleteCategory(req.body);
+  const categoryId = req.query.id;
+  const result = await CategoryService.deleteCategory({categoryId});
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -92,7 +93,14 @@ const updateSubcategory = catchAsync(async (req, res) => {
 
 // Delete Subcategory
 const deleteSubcategory = catchAsync(async (req, res) => {
-  const result = await CategoryService.deleteSubcategory(req.body);
+  const { categoryId, subcategoryId } = req.query;
+  
+  if (!categoryId || !subcategoryId) {
+    throw new ApiError(status.BAD_REQUEST, 'Both categoryId and subcategoryId are required in query parameters');
+  }
+  
+  const result = await CategoryService.deleteSubcategory({ categoryId, subcategoryId });
+  
   sendResponse(res, {
     statusCode: 200,
     success: true,
