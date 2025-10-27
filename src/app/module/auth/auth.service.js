@@ -15,6 +15,8 @@ const validateFields = require("../../../util/validateFields");
 const EmailHelpers = require("../../../util/emailHelpers");
 const Admin = require("../admin/Admin");
 const Provider = require("../provider/Provider");
+
+
 const registrationAccount = async (payload) => {
   const { role, name, password, confirmPassword, email } = payload;
 
@@ -223,6 +225,7 @@ const loginAccount = async (payload) => {
       result = await Admin.findOne({ authId: auth._id })
         .populate("authId")
         .lean();
+      console.log(result);
       break;
     case EnumUserRole.PROVIDER:
       result = await Provider.findOne({ authId: auth._id })

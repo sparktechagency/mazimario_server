@@ -1,4 +1,4 @@
-const { ProviderService } = require("./provider.service");
+const  ProviderService  = require("./provider.service");
 const sendResponse = require("../../../util/sendResponse");
 const catchAsync = require("../../../util/catchAsync");
 

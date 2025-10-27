@@ -50,7 +50,7 @@ const uploadFile = () => {
   });
 
   const fileFilter = (req, file, cb) => {
-    const allowedFieldNames = ["profile_image", "post_image", "attachments", "icon"];
+    const allowedFieldNames = ["profile_image", "post_image", "attachments", "icon", "licenses", "certificates"];
 
     // Allow requests without files (when there's no fieldname)
     if (!file.fieldname) return cb(null, true);
@@ -75,6 +75,8 @@ const uploadFile = () => {
     { name: "post_image", maxCount: 1 },
     { name: "attachments", maxCount: 5 },
     { name: "icon", maxCount: 1 },
+    { name: "licenses", maxCount: 5 },
+    { name: "certificates", maxCount: 5 },
   ]);
 
   return upload;

@@ -36,7 +36,8 @@ const registerProvider = async (req) => {
     "contactPerson",
     "coveredRadius",
     "latitude",
-    "longitude"
+    "longitude",
+    "workingHours"
   ]);
 
   // Check if provider already exists
@@ -50,6 +51,7 @@ const registerProvider = async (req) => {
     _id: data.serviceCategory,
     isActive: true
   });
+
   if (!category) {
     throw new ApiError(status.BAD_REQUEST, "Invalid or inactive category");
   }
@@ -92,18 +94,39 @@ const registerProvider = async (req) => {
   return provider;
 };
 
-// Get Provider Profile
+
+// Get Provider Profile (full registration info)
 const getProviderProfile = async (userData) => {
+  // find provider by authId and return full registration details
   const provider = await Provider.findOne({ authId: userData.authId })
     .populate("serviceCategory", "name icon")
+    .populate("authId", "name email") // include user identity info from Auth
     .lean();
+
+    console.log(provider)
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
 
-  return provider;
+  // add some useful stats (optional)
+  const [totalAssignedRequests, totalCompletedRequests] = await Promise.all([
+    ServiceRequest.countDocuments({ assignedProvider: provider._id }),
+    ServiceRequest.countDocuments({ assignedProvider: provider._id, status: "COMPLETED" }),
+  ]);
+
+  // Build response object — include everything relevant for "registration info"
+  const profile = {
+    ...provider,
+    stats: {
+      totalAssignedRequests,
+      totalCompletedRequests,
+    },
+  };
+
+  return profile;
 };
+
 
 // Update Provider Profile (requires admin approval)
 const updateProviderProfile = async (req) => {

@@ -10,7 +10,7 @@ const router = express.Router();
 router
   .post(
     "/register",
-    auth(config.auth_level.user),
+    auth(config.auth_level.provider),
     uploadFile([
       { name: "licenses", maxCount: 5 },
       { name: "certificates", maxCount: 5 }

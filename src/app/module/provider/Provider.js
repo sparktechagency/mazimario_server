@@ -23,10 +23,12 @@ const ProviderSchema = new Schema(
       type: ObjectId,
       ref: "Category",
       required: true,
+      trim: true,
     },
     subcategory: {
       type: String,
       required: true,
+      trim: true,
     },
     latitude: {
       type: Number,
@@ -41,6 +43,7 @@ const ProviderSchema = new Schema(
       required: true,
       min: 1,
       max: 100,
+      trim: true,
     },
     workingHours: [
       {
@@ -48,14 +51,17 @@ const ProviderSchema = new Schema(
           type: String,
           enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
           required: true,
+          trim: true,
         },
         startTime: {
           type: String,
           required: true,
+          trim: true,
         },
         endTime: {
           type: String,
           required: true,
+          trim: true,
         },
         isAvailable: {
           type: Boolean,
@@ -109,6 +115,32 @@ const ProviderSchema = new Schema(
     },
     pendingUpdates: {
       type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    potentialProviders: [{
+      providerId: {
+        type: ObjectId,
+        ref: "Provider",
+      },
+      status: {
+        type: String,
+        enum: ["PENDING", "AWAITING_PAYMENT", "ACCEPTED", "DECLINED", "PAID"],
+        default: "PENDING",
+      },
+      acceptedAt: Date,
+      declinedAt: Date,
+      paidAt: Date,
+    }],
+    // new fields for reservation/payment
+    reservedProvider: {
+      type: ObjectId,
+      ref: "Provider",
+      default: null,
+    },
+    reservedUntil: Date,
+    paymentIntentId: {
+      type: String,
       default: null,
     },
   },

@@ -49,7 +49,7 @@ const getProfile = async (userData) => {
 
   const [auth, result] = await Promise.all([
     Auth.findById(authId).lean(),
-    User.findById(userId).populate("authId subscriptionPlan").lean(),
+    User.findById(userId).populate("authId").lean(),
   ]);
 
   // if (!result.isSubscribed)
@@ -94,7 +94,7 @@ const getUser = async (query) => {
 
 const getAllUsers = async (userData, query) => {
   const userQuery = new QueryBuilder(
-    User.find({}).populate("authId subscriptionPlan").lean(),
+    User.find({}).populate("authId").lean(),
     query
   )
     .search(["email", "name"])
@@ -133,7 +133,6 @@ const UserService = {
   getProfile,
   deleteMyAccount,
   updateProfile,
-
   getUser,
   getAllUsers,
   updateBlockUnblockUser,
