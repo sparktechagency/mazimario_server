@@ -64,7 +64,7 @@ const ServiceRequestSchema = new Schema(
     }],
     status: {
       type: String,
-      enum: ["PENDING", "PROCESSING", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "PAYMENT_PENDING"],
+      enum: ["PENDING", "ONGOING", "COMPLETED"],
       default: "PENDING",
     },
     assignedProvider: {

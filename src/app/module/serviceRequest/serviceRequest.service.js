@@ -6,6 +6,7 @@ const Provider = require("../provider/Provider");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const QueryBuilder = require("../../../builder/queryBuilder");
+const mongoose = require("mongoose");
 
 // Helper function to calculate distance
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -75,9 +76,9 @@ const createServiceRequest = async (req) => {
   ]);
 
   const auth = await Auth.findById(user.authId);
-  if (!auth.isPhoneVerified) {
-    throw new ApiError(status.FORBIDDEN, "Phone number must be verified");
-  }
+  // if (!auth.isPhoneVerified) {
+  //   throw new ApiError(status.FORBIDDEN, "Phone number must be verified");
+  // }
 
   const category = await Category.findOne({
     _id: data.serviceCategory,
@@ -134,13 +135,10 @@ const createServiceRequest = async (req) => {
 const getServiceRequests = async (userData, query) => {
   const { userId, role } = userData;
 
-  let filter = {};
-  if (role === "user") {
-    filter.customerId = userId;
-  } else if (role === "provider") {
-    filter.assignedProvider = userId;
-  }
+  // Base filter - always filter by the logged-in user's ID
+  const filter = { customerId: new mongoose.Types.ObjectId(userId) };
 
+  // Status filter (optional)
   if (query.status) {
     filter.status = query.status;
   }
@@ -150,7 +148,6 @@ const getServiceRequests = async (userData, query) => {
       .populate("serviceCategory", "name icon")
       .populate("assignedProvider", "companyName contactPerson")
       .populate("customerId", "name email phoneNumber")
-      .populate("potentialProviders.providerId", "companyName contactPerson")
       .lean(),
     query
   )
@@ -164,7 +161,12 @@ const getServiceRequests = async (userData, query) => {
     serviceRequestQuery.countTotal(),
   ]);
 
-  return { meta, requests };
+  return { 
+    meta, 
+    requests,
+    success: true,
+    message: "Your service requests retrieved successfully"
+  };
 };
 
 const getServiceRequestById = async (query) => {

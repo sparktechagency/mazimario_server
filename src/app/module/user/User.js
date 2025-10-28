@@ -30,6 +30,17 @@ const UserSchema = new Schema(
     address: {
       type: String,
     },
+    favorites: {
+      categories: [{
+        categoryId: {
+          type: Types.ObjectId,
+          ref: 'Category',
+          required: true
+        }
+      }]
+    }
+
+
 
     // isSubscribed: {
     //   type: Boolean,
@@ -50,6 +61,9 @@ const UserSchema = new Schema(
     timestamps: true,
   }
 );
+
+UserSchema.index({ authId: 1 }, { unique: true }); 
+
 
 const User = model("User", UserSchema);
 

@@ -228,6 +228,37 @@ const getPotentialRequests = async (userData, query) => {
 };
 
 // Handle Request Response (Accept/Decline)
+// const handleRequestResponse = async (userData, payload) => {
+//   validateFields(payload, ["requestId", "action"]);
+
+//   const provider = await Provider.findOne({ authId: userData.authId });
+//   const serviceRequest = await ServiceRequest.findById(payload.requestId);
+
+//   if (!provider || !serviceRequest) {
+//     throw new ApiError(status.NOT_FOUND, "Provider or request not found");
+//   }
+
+//   const potentialProviderIndex = serviceRequest.potentialProviders.findIndex(
+//     pp => pp.providerId.toString() === provider._id.toString()
+//   );
+
+//   if (potentialProviderIndex === -1) {
+//     throw new ApiError(status.BAD_REQUEST, "Request not available for this provider");
+//   }
+
+//   if (payload.action === "ACCEPT") {
+//     serviceRequest.potentialProviders[potentialProviderIndex].status = "ACCEPTED";
+//     serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt = new Date();
+//     serviceRequest.status = "PROCESSING";
+//   } else if (payload.action === "DECLINE") {
+//     serviceRequest.potentialProviders[potentialProviderIndex].status = "DECLINED";
+//     serviceRequest.potentialProviders[potentialProviderIndex].declinedAt = new Date();
+//   }
+
+//   await serviceRequest.save();
+//   return { message: `Request ${payload.action.toLowerCase()}ed successfully` };
+// };
+
 const handleRequestResponse = async (userData, payload) => {
   validateFields(payload, ["requestId", "action"]);
 
@@ -247,16 +278,40 @@ const handleRequestResponse = async (userData, payload) => {
   }
 
   if (payload.action === "ACCEPT") {
-    serviceRequest.potentialProviders[potentialProviderIndex].status = "ACCEPTED";
-    serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt = new Date();
-    serviceRequest.status = "PROCESSING";
+    // Check if provider has already paid or needs to pay
+    if (serviceRequest.leadFee > 0) {
+      // Set status to PAYMENT_PENDING and redirect to payment
+      serviceRequest.potentialProviders[potentialProviderIndex].status = "PAYMENT_PENDING";
+      serviceRequest.status = "PAYMENT_PENDING";
+      
+      // After successful payment, update status to ACCEPTED and PROCESSING
+      serviceRequest.potentialProviders[potentialProviderIndex].status = "PAID";
+      serviceRequest.potentialProviders[potentialProviderIndex].paidAt = new Date();
+      serviceRequest.assignedProvider = provider._id;
+      serviceRequest.status = "PROCESSING";
+    } else {
+      // No lead fee, directly assign to provider
+      serviceRequest.potentialProviders[potentialProviderIndex].status = "ACCEPTED";
+      serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt = new Date();
+      serviceRequest.assignedProvider = provider._id;
+      serviceRequest.status = "PROCESSING";
+    }
   } else if (payload.action === "DECLINE") {
-    serviceRequest.potentialProviders[potentialProviderIndex].status = "DECLINED";
-    serviceRequest.potentialProviders[potentialProviderIndex].declinedAt = new Date();
+    // Remove the provider from potential providers array when they decline
+    serviceRequest.potentialProviders.splice(potentialProviderIndex, 1);
   }
 
   await serviceRequest.save();
-  return { message: `Request ${payload.action.toLowerCase()}ed successfully` };
+  
+  if (payload.action === "ACCEPT") {
+    return { 
+      message: "Request accepted successfully", 
+      requiresPayment: serviceRequest.leadFee > 0,
+      leadFee: serviceRequest.leadFee
+    };
+  } else {
+    return { message: "Request declined successfully" };
+  }
 };
 
 // Mark Request as Complete

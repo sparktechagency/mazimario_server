@@ -12,6 +12,16 @@ router
   .get(
     "/subcategories-by-category",
     CategoryController.getSubcategoriesByCategory
+  )
+  .patch(
+    "/toggle-to-favorites",
+    auth(config.auth_level.user),
+    CategoryController.toggleToFavorites
+  )
+  .get(
+    '/favorites',
+    auth(config.auth_level.user),
+    CategoryController.getFavoriteCategories
   );
 
 // Admin routes

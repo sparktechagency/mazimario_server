@@ -4,6 +4,8 @@ const QueryBuilder = require("../../../builder/queryBuilder");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const unlinkFile = require("../../../util/unlinkFile");
+const User = require("../user/User");
+const mongoose = require("mongoose");
 
 // Create Category
 const createCategory = async (req) => {
@@ -291,11 +293,14 @@ const toggleSubcategoryStatus = async (payload) => {
 // Get Active Categories for Dropdown
 const getActiveCategories = async () => {
   const categories = await Category.find({ isActive: true })
-    .select('name image icon')
+    .populate('subcategories', 'name isActive')
     .sort({ name: 1 })
     .lean();
 
-  return categories;
+  return categories.map(category => ({
+    ...category,
+    subcategories: category.subcategories.filter(sub => sub.isActive),
+  }));
 };
 
 // Get Subcategories by Category ID for Dropdown
@@ -321,6 +326,81 @@ const getSubcategoriesByCategory = async (categoryId) => {
   return activeSubcategories;
 };
 
+
+// Toggle Category to Favorites
+// In category.service.js
+const toggleToFavorites = async (payload) => {
+  const { authId, categoryId } = payload;
+  
+  validateFields(payload, ["authId", "categoryId"]);
+
+  // Validate ObjectId format
+  if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+    throw new ApiError(status.BAD_REQUEST, "Invalid category ID format");
+  }
+
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    throw new ApiError(status.NOT_FOUND, "Category not found");
+  }
+
+  // Changed from findById to findOne with authId
+  const user = await User.findOne({ authId: new mongoose.Types.ObjectId(authId) });
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found");
+  }
+
+  // Check if category is already favorited
+  const existingIndex = user.favorites.categories.findIndex(
+    fav => fav.categoryId.toString() === categoryId
+  );
+
+  if (existingIndex > -1) {
+    // Remove from favorites
+    user.favorites.categories.splice(existingIndex, 1);
+    await user.save();
+    return { 
+      message: "Category removed from favorites",
+      isFavorite: false
+    };
+  } else {
+    // Add to favorites
+    user.favorites.categories.push({
+      categoryId: category._id
+    });
+    await user.save();
+    return { 
+      message: "Category added to favorites",
+      isFavorite: true
+    };
+  }
+};
+
+// Add this in category.service.js
+const getFavoriteCategories = async (authId) => {
+  const user = await User.findOne({ authId: new mongoose.Types.ObjectId(authId) })
+    .populate('favorites.categories.categoryId', 'name icon isActive');
+  
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found");
+  }
+
+  // Filter out any null categories (in case they were deleted)
+  const favorites = user.favorites.categories
+    .filter(fav => fav.categoryId)  // Only include existing categories
+    .map(fav => ({
+      ...fav.categoryId.toObject(),
+      isFavorite: true
+    }));
+
+  return {
+    success: true,
+    message: "Favorite categories retrieved successfully",
+    data: favorites
+  };
+};
+
+
 module.exports = {
   createCategory,
   getAllCategories,
@@ -334,4 +414,6 @@ module.exports = {
   toggleSubcategoryStatus,
   getActiveCategories,
   getSubcategoriesByCategory,
+  toggleToFavorites,
+  getFavoriteCategories
 };

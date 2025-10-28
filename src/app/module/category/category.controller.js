@@ -49,7 +49,7 @@ const updateCategory = catchAsync(async (req, res) => {
 // Delete Category
 const deleteCategory = catchAsync(async (req, res) => {
   const categoryId = req.query.id;
-  const result = await CategoryService.deleteCategory({categoryId});
+  const result = await CategoryService.deleteCategory({ categoryId });
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -94,13 +94,13 @@ const updateSubcategory = catchAsync(async (req, res) => {
 // Delete Subcategory
 const deleteSubcategory = catchAsync(async (req, res) => {
   const { categoryId, subcategoryId } = req.query;
-  
+
   if (!categoryId || !subcategoryId) {
     throw new ApiError(status.BAD_REQUEST, 'Both categoryId and subcategoryId are required in query parameters');
   }
-  
+
   const result = await CategoryService.deleteSubcategory({ categoryId, subcategoryId });
-  
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -142,6 +142,30 @@ const getSubcategoriesByCategory = catchAsync(async (req, res) => {
   });
 });
 
+const toggleToFavorites = catchAsync(async (req, res) => {
+  const result = await CategoryService.toggleToFavorites({
+    ...req.body,
+    authId: req.user.authId  // Changed from userId to authId
+  });
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Category favorited successfully",
+    data: result,
+  });
+});
+
+// Add this in category.controller.js
+const getFavoriteCategories = catchAsync(async (req, res) => {
+  const result = await CategoryService.getFavoriteCategories(req.user.authId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Favorite categories retrieved successfully",
+    data: result,
+  });
+});
+
 const CategoryController = {
   createCategory,
   getAllCategories,
@@ -155,6 +179,8 @@ const CategoryController = {
   toggleSubcategoryStatus,
   getActiveCategories,
   getSubcategoriesByCategory,
+  toggleToFavorites,
+  getFavoriteCategories
 };
 
 module.exports = { CategoryController };
