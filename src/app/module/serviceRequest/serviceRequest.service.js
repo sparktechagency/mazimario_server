@@ -13,19 +13,22 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) *
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
-const deg2rad = (deg) => deg * (Math.PI/180);
+const deg2rad = (deg) => deg * (Math.PI / 180);
 
 // Find matching providers
 const findMatchingProviders = async (serviceRequestData) => {
-  const { serviceCategory, subcategory, latitude, longitude } = serviceRequestData;
+  const { serviceCategory, subcategory, latitude, longitude } =
+    serviceRequestData;
 
   const matchingProviders = await Provider.find({
     serviceCategory,
@@ -46,10 +49,12 @@ const findMatchingProviders = async (serviceRequestData) => {
       provider.latitude,
       provider.longitude
     );
-    
+
     if (distance <= 50 && distance <= provider.coveredRadius) {
       // Check availability (simplified - you might want to check specific date/time)
-      const hasAvailability = provider.workingHours.some(wh => wh.isAvailable);
+      const hasAvailability = provider.workingHours.some(
+        (wh) => wh.isAvailable
+      );
       if (hasAvailability) {
         eligibleProviders.push(provider._id);
       }
@@ -82,21 +87,21 @@ const createServiceRequest = async (req) => {
 
   const category = await Category.findOne({
     _id: data.serviceCategory,
-    isActive: true
+    isActive: true,
   });
   if (!category) {
     throw new ApiError(status.BAD_REQUEST, "Invalid category");
   }
 
   const subcategoryExists = category.subcategories.some(
-    sub => sub._id.toString() === data.subcategory && sub.isActive
+    (sub) => sub._id.toString() === data.subcategory && sub.isActive
   );
   if (!subcategoryExists) {
     throw new ApiError(status.BAD_REQUEST, "Invalid subcategory");
   }
 
   const selectedSubcategory = category.subcategories.find(
-    sub => sub._id.toString() === data.subcategory
+    (sub) => sub._id.toString() === data.subcategory
   );
 
   const serviceRequestData = {
@@ -123,12 +128,13 @@ const createServiceRequest = async (req) => {
 
   // Find and assign matching providers
   const matchingProviderIds = await findMatchingProviders(serviceRequestData);
-  serviceRequest.potentialProviders = matchingProviderIds.map(providerId => ({
+  serviceRequest.potentialProviders = matchingProviderIds.map((providerId) => ({
     providerId,
     status: "PENDING",
   }));
 
   await serviceRequest.save();
+
   return await serviceRequest.populate("serviceCategory", "name icon");
 };
 
@@ -232,9 +238,9 @@ const assignProviderToRequest = async (userData, payload) => {
 
   const serviceRequest = await ServiceRequest.findByIdAndUpdate(
     payload.requestId,
-    { 
-      assignedProvider: payload.providerId, 
-      status: "ASSIGNED" 
+    {
+      assignedProvider: payload.providerId,
+      status: "ASSIGNED",
     },
     { new: true, runValidators: true }
   )
