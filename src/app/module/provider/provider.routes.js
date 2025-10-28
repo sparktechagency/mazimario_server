@@ -59,6 +59,11 @@ router
     "/get-all",
     auth(config.auth_level.admin),
     ProviderController.getAllProviders
+  )
+  .get(
+    "/get",
+    auth(config.auth_level.admin),
+    ProviderController.getProviderById
   );
 
 module.exports = router;

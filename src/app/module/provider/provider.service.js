@@ -364,6 +364,22 @@ const getAllProviders = async (query) => {
   return { meta, providers };
 };
 
+// Get Provider by ID
+const getProviderById = async (id) => {
+  const provider = await Provider.findById(id)
+    .populate("serviceCategory", "name icon")
+    .populate("authId", "name email");
+
+  if (!provider) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found");
+  }
+
+  return provider;
+};
+
+
+
+
 module.exports = {
   registerProvider,
   getProviderProfile,
@@ -373,4 +389,5 @@ module.exports = {
   handleRequestResponse,
   markRequestComplete,
   getAllProviders,
+  getProviderById,
 };

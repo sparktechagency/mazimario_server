@@ -82,6 +82,16 @@ const getAllProviders = catchAsync(async (req, res) => {
   });
 });
 
+const getProviderById = catchAsync(async (req, res) => {
+  const result = await ProviderService.getProviderById(req.query.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Provider retrieved successfully",
+    data: result,
+  });
+});
+
 const ProviderController = {
   registerProvider,
   getProviderProfile,
@@ -90,7 +100,8 @@ const ProviderController = {
   getPotentialRequests,
   handleRequestResponse,
   markRequestComplete,
-  getAllProviders,
+  getAllProviders,  
+  getProviderById,
 };
 
 module.exports = { ProviderController };
