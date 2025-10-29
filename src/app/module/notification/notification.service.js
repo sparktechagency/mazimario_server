@@ -24,13 +24,15 @@ const createNotification = async (userData, payload) => {
 };
 
 const getNotification = async (userData, query) => {
-  const { role } = userData;
+  const { role, userId } = userData;
   const Model = role === EnumUserRole.ADMIN ? AdminNotification : Notification;
 
   if (role !== EnumUserRole.ADMIN) validateFields(query, ["notificationId"]);
 
   const queryObj =
-    role === EnumUserRole.ADMIN ? {} : { _id: query.notificationId };
+    role === EnumUserRole.ADMIN 
+      ? {} 
+      : { _id: query.notificationId, toId: userId }; // Verify ownership
 
   const notification = await Model.findOne(queryObj).lean();
 
@@ -47,10 +49,11 @@ const getNotification = async (userData, query) => {
  * - If the user is a **regular user**, it fetches only notifications relevant to them from `Notification`.
  */
 const getAllNotifications = async (userData, query) => {
-  const { role } = userData;
+  const { role, userId } = userData;
 
-  const Model = role === EnumUserRole.USER ? Notification : AdminNotification;
-  const queryObj = role === EnumUserRole.USER ? { toId: userData.userId } : {};
+  // Admin gets AdminNotification, USER and PROVIDER get Notification filtered by toId
+  const Model = role === EnumUserRole.ADMIN ? AdminNotification : Notification;
+  const queryObj = role === EnumUserRole.ADMIN ? {} : { toId: userId };
 
   const notificationQuery = new QueryBuilder(Model.find(queryObj).lean(), query)
     .search([])
@@ -71,10 +74,11 @@ const getAllNotifications = async (userData, query) => {
 };
 
 const updateAsReadUnread = async (userData, payload) => {
-  const { role } = userData;
+  const { role, userId } = userData;
 
-  const Model = role === EnumUserRole.USER ? Notification : AdminNotification;
-  const queryObj = role === EnumUserRole.USER ? { toId: userData.userId } : {};
+  // Admin uses AdminNotification, USER and PROVIDER use Notification
+  const Model = role === EnumUserRole.ADMIN ? AdminNotification : Notification;
+  const queryObj = role === EnumUserRole.ADMIN ? {} : { toId: userId };
   queryObj.isRead = !payload.isRead;
 
   const result = await Model.updateMany(queryObj, {
@@ -87,12 +91,15 @@ const updateAsReadUnread = async (userData, payload) => {
 const deleteNotification = async (userData, payload) => {
   validateFields(payload, ["notificationId"]);
 
-  const Model =
-    userData.role === EnumUserRole.USER ? Notification : AdminNotification;
+  const { role, userId } = userData;
+  const Model = role === EnumUserRole.ADMIN ? AdminNotification : Notification;
 
-  const notification = await Model.deleteOne({
-    _id: payload.notificationId,
-  });
+  // Verify ownership before deleting
+  const queryObj = role === EnumUserRole.ADMIN 
+    ? { _id: payload.notificationId }
+    : { _id: payload.notificationId, toId: userId };
+
+  const notification = await Model.deleteOne(queryObj);
 
   if (!notification.deletedCount)
     throw new ApiError(status.NOT_FOUND, "Notification not found");

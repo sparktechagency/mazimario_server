@@ -12,35 +12,25 @@ const ProviderSchema = new Schema(
     },
     companyName: {
       type: String,
-      required: true,
       trim: true,
     },
     website: {
       type: String,
       trim: true,
     },
-    serviceCategory: {
+    serviceCategories: [{
       type: ObjectId,
       ref: "Category",
-      required: true,
       trim: true,
-    },
-    subcategory: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    }],
     latitude: {
       type: Number,
-      required: true,
     },
     longitude: {
       type: Number,
-      required: true,
     },
     coveredRadius: {
       type: Number, // in kilometers
-      required: true,
       min: 1,
       max: 100,
       trim: true,
@@ -55,12 +45,10 @@ const ProviderSchema = new Schema(
         },
         startTime: {
           type: String,
-          required: true,
           trim: true,
         },
         endTime: {
           type: String,
-          required: true,
           trim: true,
         },
         isAvailable: {
@@ -71,23 +59,11 @@ const ProviderSchema = new Schema(
     ],
     serviceLocation: {
       type: String,
-      required: true,
       trim: true,
     },
     contactPerson: {
-      name: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-      email: {
-        type: String,
-        trim: true,
-      },
-      phone: {
-        type: String,
-        trim: true,
-      },
+      type: String,
+      trim: true,
     },
     isActive: {
       type: Boolean,
@@ -97,10 +73,7 @@ const ProviderSchema = new Schema(
       type: Boolean,
       default: false,
     },
-    licenses: [{
-      type: String, // file paths
-    }],
-    certificates: [{
+    attachments: [{
       type: String, // file paths
     }],
     rating: {
@@ -117,7 +90,6 @@ const ProviderSchema = new Schema(
       type: Schema.Types.Mixed,
       default: null,
     },
-
     potentialProviders: [{
       providerId: {
         type: ObjectId,

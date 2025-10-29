@@ -52,6 +52,16 @@ const getPotentialRequests = catchAsync(async (req, res) => {
   });
 });
 
+const getPotentialRequestById = catchAsync(async (req, res) => {
+  const result = await ProviderService.getPotentialRequestById(req.user, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Potential request retrieved successfully",
+    data: result,
+  });
+});
+
 const handleRequestResponse = catchAsync(async (req, res) => {
   const result = await ProviderService.handleRequestResponse(req.user, req.body);
   sendResponse(res, {
@@ -92,16 +102,28 @@ const getProviderById = catchAsync(async (req, res) => {
   });
 });
 
+const verifyProvider = catchAsync(async (req, res) => {
+  const result = await ProviderService.verifyProvider(req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Provider ${req.body.isVerified ? 'verified' : 'unverified'} successfully`,
+    data: result,
+  });
+});
+
 const ProviderController = {
   registerProvider,
   getProviderProfile,
   updateProviderProfile,
   toggleProviderStatus,
   getPotentialRequests,
+  getPotentialRequestById,
   handleRequestResponse,
   markRequestComplete,
   getAllProviders,  
   getProviderById,
+  verifyProvider,
 };
 
 module.exports = { ProviderController };

@@ -9,11 +9,10 @@ const router = express.Router();
 // Provider routes
 router
   .post(
-    "/register",
+    "/provider-register",
     auth(config.auth_level.provider),
     uploadFile([
-      { name: "licenses", maxCount: 5 },
-      { name: "certificates", maxCount: 5 }
+      { name: "attachments", maxCount: 5 },
     ]),
     ProviderController.registerProvider
   )
@@ -26,8 +25,7 @@ router
     "/update-profile",
     auth(config.auth_level.provider),
     uploadFile([
-      { name: "licenses", maxCount: 5 },
-      { name: "certificates", maxCount: 5 }
+      { name: "attachments", maxCount: 5 },
     ]),
     ProviderController.updateProviderProfile
   )
@@ -40,6 +38,11 @@ router
     "/potential-requests",
     auth(config.auth_level.provider),
     ProviderController.getPotentialRequests
+  )
+  .get(
+    "/potential-request",
+    auth(config.auth_level.provider),
+    ProviderController.getPotentialRequestById
   )
   .patch(
     "/handle-request",
@@ -64,6 +67,11 @@ router
     "/get",
     auth(config.auth_level.admin),
     ProviderController.getProviderById
+  )
+  .patch(
+    "/verify",
+    auth(config.auth_level.admin),
+    ProviderController.verifyProvider
   );
 
 module.exports = router;

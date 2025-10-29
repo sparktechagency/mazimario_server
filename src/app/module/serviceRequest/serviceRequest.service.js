@@ -7,6 +7,7 @@ const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const QueryBuilder = require("../../../builder/queryBuilder");
 const mongoose = require("mongoose");
+const postNotification = require("../../../util/postNotification");
 
 // Helper function to calculate distance
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -25,14 +26,15 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 
 const deg2rad = (deg) => deg * (Math.PI / 180);
 
-// Find matching providers
+// Find matching providers - UPDATED FOR CATEGORY-ONLY MATCHING
+// CORRECT - Using new field names:
 const findMatchingProviders = async (serviceRequestData) => {
-  const { serviceCategory, subcategory, latitude, longitude } =
-    serviceRequestData;
+  const { serviceCategory, latitude, longitude } = serviceRequestData;
 
+  // Find providers who have this serviceCategory in their serviceCategories array
   const matchingProviders = await Provider.find({
-    serviceCategory,
-    subcategory,
+    serviceCategories: serviceCategory, // ✅ CORRECT: Check array inclusion
+    // ❌ REMOVED: subcategory (providers don't have subcategories)
     isActive: true,
     isVerified: true,
   }).select("_id coveredRadius latitude longitude workingHours");
@@ -51,7 +53,6 @@ const findMatchingProviders = async (serviceRequestData) => {
     );
 
     if (distance <= 50 && distance <= provider.coveredRadius) {
-      // Check availability (simplified - you might want to check specific date/time)
       const hasAvailability = provider.workingHours.some(
         (wh) => wh.isAvailable
       );
@@ -63,6 +64,94 @@ const findMatchingProviders = async (serviceRequestData) => {
 
   return eligibleProviders;
 };
+
+
+// const createServiceRequest = async (req) => {
+//   const { files, body: data, user } = req;
+
+//   validateFields(data, [
+//     "serviceCategory",
+//     "subcategory",
+//     "startDate",
+//     "endDate",
+//     "startTime",
+//     "endTime",
+//     "address",
+//     "latitude",
+//     "longitude",
+//     "customerPhone",
+//   ]);
+
+//   const auth = await Auth.findById(user.authId);
+//   // if (!auth.isPhoneVerified) {
+//   //   throw new ApiError(status.FORBIDDEN, "Phone number must be verified");
+//   // }
+
+//   const category = await Category.findOne({
+//     _id: data.serviceCategory,
+//     isActive: true,
+//   });
+//   if (!category) {
+//     throw new ApiError(status.BAD_REQUEST, "Invalid category");
+//   }
+
+//   const subcategoryExists = category.subcategories.some(
+//     (sub) => sub._id.toString() === data.subcategory && sub.isActive
+//   );
+//   if (!subcategoryExists) {
+//     throw new ApiError(status.BAD_REQUEST, "Invalid subcategory");
+//   }
+
+//   const selectedSubcategory = category.subcategories.find(
+//     (sub) => sub._id.toString() === data.subcategory
+//   );
+
+//   const serviceRequestData = {
+//     customerId: user.userId,
+//     customerPhone: data.customerPhone,
+//     serviceCategory: data.serviceCategory,
+//     subcategory: selectedSubcategory.name,
+//     priority: data.priority || "Normal",
+//     startDate: data.startDate,
+//     endDate: data.endDate,
+//     startTime: data.startTime,
+//     endTime: data.endTime,
+//     address: data.address,
+//     description: data.description,
+//     latitude: parseFloat(data.latitude),
+//     longitude: parseFloat(data.longitude),
+//   };
+
+//   if (files && files.attachments) {
+//     serviceRequestData.attachments = files.attachments.map((file) => file.path);
+//   }
+
+//   const serviceRequest = await ServiceRequest.create(serviceRequestData);
+
+//   // Send notification to user
+//   await postNotification(
+//     "Service Request Created",
+//     `Your service request for ${selectedSubcategory.name} has been created successfully. Request ID: ${serviceRequest._id}`,
+//     user.userId
+//   );
+
+//   // Send notification to admin
+//   await postNotification(
+//     "New Service Request Created",
+//     `New service request for ${selectedSubcategory.name} has been created by ${user.name || 'a customer'}. Request ID: ${serviceRequest._id}`
+//   );
+
+//   // Find and assign matching providers
+//   const matchingProviderIds = await findMatchingProviders(serviceRequestData);
+//   serviceRequest.potentialProviders = matchingProviderIds.map((providerId) => ({
+//     providerId,
+//     status: "PENDING",
+//   }));
+
+//   await serviceRequest.save();
+
+//   return await serviceRequest.populate("serviceCategory", "name icon");
+// };
 
 const createServiceRequest = async (req) => {
   const { files, body: data, user } = req;
@@ -81,9 +170,6 @@ const createServiceRequest = async (req) => {
   ]);
 
   const auth = await Auth.findById(user.authId);
-  // if (!auth.isPhoneVerified) {
-  //   throw new ApiError(status.FORBIDDEN, "Phone number must be verified");
-  // }
 
   const category = await Category.findOne({
     _id: data.serviceCategory,
@@ -126,14 +212,54 @@ const createServiceRequest = async (req) => {
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);
 
-  // Find and assign matching providers
-  const matchingProviderIds = await findMatchingProviders(serviceRequestData);
-  serviceRequest.potentialProviders = matchingProviderIds.map((providerId) => ({
-    providerId,
-    status: "PENDING",
-  }));
+  // Send notification to user
+  await postNotification(
+    "Service Request Created",
+    `Your service request for ${selectedSubcategory.name} has been created successfully. Request ID: ${serviceRequest.requestId}`,
+    user.userId
+  );
 
-  await serviceRequest.save();
+  // Send notification to admin
+  await postNotification(
+    "New Service Request Created",
+    `New service request for ${selectedSubcategory.name} has been created by ${user.name || 'a customer'}. Request ID: ${serviceRequest.requestId}`
+  );
+
+  // STEP 1: Find matching providers
+  const matchingProviders = await findMatchingProviders(serviceRequestData);
+  
+  if (matchingProviders.length > 0) {
+    // STEP 2: Add to ServiceRequest's potentialProviders (existing logic)
+    serviceRequest.potentialProviders = matchingProviders.map((providerId) => ({
+      providerId,
+      status: "PENDING",
+    }));
+
+    // STEP 3: ALSO ADD TO EACH PROVIDER'S incomingRequests ARRAY
+    for (const providerId of matchingProviders) {
+      await Provider.findByIdAndUpdate(
+        providerId,
+        {
+          $push: {
+            incomingRequests: {
+              requestId: serviceRequest._id,
+              status: "PENDING",
+              receivedAt: new Date()
+            }
+          }
+        }
+      );
+
+      // Send notification to provider
+      await postNotification(
+        "New Service Request Available",
+        `A new ${selectedSubcategory.name} service request is available in your area. Request ID: ${serviceRequest.requestId}`,
+        providerId
+      );
+    }
+
+    await serviceRequest.save();
+  }
 
   return await serviceRequest.populate("serviceCategory", "name icon");
 };
@@ -254,6 +380,8 @@ const assignProviderToRequest = async (userData, payload) => {
 
   return serviceRequest;
 };
+
+
 
 const ServiceRequestService = {
   createServiceRequest,

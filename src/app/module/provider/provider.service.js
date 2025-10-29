@@ -8,21 +8,80 @@ const QueryBuilder = require("../../../builder/queryBuilder");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const unlinkFile = require("../../../util/unlinkFile");
+const postNotification = require("../../../util/postNotification");
 
 // Helper function to calculate distance
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
-const deg2rad = (deg) => deg * (Math.PI/180);
+const deg2rad = (deg) => deg * (Math.PI / 180);
+
+// Helper function to match a provider with existing pending requests
+const matchProviderWithPendingRequests = async (provider) => {
+  // Find all PENDING service requests
+  const pendingRequests = await ServiceRequest.find({
+    status: "PENDING",
+    serviceCategory: { $in: provider.serviceCategories }, // Match any of provider's categories
+  }).select("_id serviceCategory latitude longitude potentialProviders");
+
+  const matchedRequests = [];
+
+  for (const request of pendingRequests) {
+    // Check if provider is already in potentialProviders
+    const alreadyAdded = request.potentialProviders.some(
+      pp => pp.providerId.toString() === provider._id.toString()
+    );
+
+    if (alreadyAdded) continue;
+
+    // Check distance
+    const distance = calculateDistance(
+      provider.latitude,
+      provider.longitude,
+      request.latitude,
+      request.longitude
+    );
+
+    // Check if within range
+    if (distance <= 50 && distance <= provider.coveredRadius) {
+      const hasAvailability = provider.workingHours.some(wh => wh.isAvailable);
+      
+      if (hasAvailability) {
+        matchedRequests.push(request._id);
+        
+        // Add provider to request's potentialProviders
+        await ServiceRequest.findByIdAndUpdate(request._id, {
+          $push: {
+            potentialProviders: {
+              providerId: provider._id,
+              status: "PENDING"
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // Send notification to provider about matched requests
+  if (matchedRequests.length > 0) {
+    await postNotification(
+      "New Service Requests Available",
+      `You have ${matchedRequests.length} new service request(s) matching your services and location.`,
+      provider._id
+    );
+  }
+
+  return matchedRequests.length;
+};
 
 // Register Provider
 const registerProvider = async (req) => {
@@ -30,8 +89,7 @@ const registerProvider = async (req) => {
 
   validateFields(data, [
     "companyName",
-    "serviceCategory",
-    "subcategory",
+    "serviceCategories", // Changed from serviceCategory to serviceCategories
     "serviceLocation",
     "contactPerson",
     "coveredRadius",
@@ -40,87 +98,110 @@ const registerProvider = async (req) => {
     "workingHours"
   ]);
 
-  // Check if provider already exists
+  // Check if provider already exists with this auth ID
   const existingProvider = await Provider.findOne({ authId: user.authId });
-  if (existingProvider) {
-    throw new ApiError(status.BAD_REQUEST, "Provider already registered");
-  }
 
-  // Validate category and subcategory
-  const category = await Category.findOne({
-    _id: data.serviceCategory,
-    isActive: true
+
+  // Check if company name is already taken by another active provider
+  const existingCompany = await Provider.findOne({
+    companyName: data.companyName,
+    isActive: true,
+    _id: { $ne: existingProvider?._id }
   });
 
-  if (!category) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive category");
+  if (existingCompany) {
+    throw new ApiError(status.CONFLICT, "This company name is already registered. Please choose a different company name.");
   }
 
-  const subcategoryExists = category.subcategories.some(
-    sub => sub._id.toString() === data.subcategory && sub.isActive
-  );
-  if (!subcategoryExists) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid or inactive subcategory");
+  // Parse and validate service categories (array of category IDs)
+  const serviceCategories = JSON.parse(data.serviceCategories || "[]");
+
+  if (!Array.isArray(serviceCategories) || serviceCategories.length === 0) {
+    throw new ApiError(status.BAD_REQUEST, "At least one service category is required");
   }
 
-  const selectedSubcategory = category.subcategories.find(
-    sub => sub._id.toString() === data.subcategory
-  );
+  // Validate all categories exist and are active
+  for (const categoryId of serviceCategories) {
+    const category = await Category.findOne({
+      _id: categoryId,
+      isActive: true
+    });
+
+    if (!category) {
+      throw new ApiError(status.BAD_REQUEST, `Invalid or inactive category: ${categoryId}`);
+    }
+  }
 
   const providerData = {
     authId: user.authId,
     companyName: data.companyName,
     website: data.website,
-    serviceCategory: data.serviceCategory,
-    subcategory: selectedSubcategory.name,
+    serviceCategories: serviceCategories, // Array of category IDs
     latitude: parseFloat(data.latitude),
     longitude: parseFloat(data.longitude),
     coveredRadius: parseFloat(data.coveredRadius),
     serviceLocation: data.serviceLocation,
-    contactPerson: JSON.parse(data.contactPerson),
+    contactPerson: data.contactPerson,
     workingHours: JSON.parse(data.workingHours || "[]"),
   };
 
   // Handle file uploads
-  if (files && files.licenses) {
-    providerData.licenses = files.licenses.map(file => file.path);
-  }
-
-  if (files && files.certificates) {
-    providerData.certificates = files.certificates.map(file => file.path);
+  if (files && files.attachments) {
+    providerData.attachments = files.attachments.map(file => file.path);
   }
 
   const provider = await Provider.create(providerData);
+
+  // Notify admin about new provider registration
+  await postNotification(
+    "New Provider Registered",
+    `A new provider has been registered: ${provider.companyName}. Please verify them.`
+  );
+
+  // IMPORTANT: Match new provider with existing PENDING service requests
+  // Only if provider is verified (admin can verify later, so this runs after verification too)
+  if (provider.isVerified && provider.isActive) {
+    await matchProviderWithPendingRequests(provider);
+  }
+
   return provider;
 };
 
 
 // Get Provider Profile (full registration info)
 const getProviderProfile = async (userData) => {
-  // find provider by authId and return full registration details
+  // Find the LATEST provider by authId (sort by createdAt desc)
   const provider = await Provider.findOne({ authId: userData.authId })
-    .populate("serviceCategory", "name icon")
-    .populate("authId", "name email") // include user identity info from Auth
+    .sort({ createdAt: -1 }) // Get the most recent one
+    .populate("serviceCategories", "name icon")
+    .populate("authId", "name email")
     .lean();
 
-    console.log(provider)
+  console.log("Found provider:", provider);
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
 
-  // add some useful stats (optional)
-  const [totalAssignedRequests, totalCompletedRequests] = await Promise.all([
+  // Add stats
+  const [totalAssignedRequests, totalCompletedRequests, totalPendingRequests] = await Promise.all([
     ServiceRequest.countDocuments({ assignedProvider: provider._id }),
     ServiceRequest.countDocuments({ assignedProvider: provider._id, status: "COMPLETED" }),
+    ServiceRequest.countDocuments({
+      "potentialProviders.providerId": provider._id,
+      "potentialProviders.status": "PENDING",
+      assignedProvider: { $exists: false }
+    }),
   ]);
 
-  // Build response object — include everything relevant for "registration info"
   const profile = {
     ...provider,
     stats: {
       totalAssignedRequests,
       totalCompletedRequests,
+      totalPendingRequests,
+      acceptanceRate: totalAssignedRequests > 0 ?
+        (totalCompletedRequests / totalAssignedRequests * 100).toFixed(1) : 0,
     },
   };
 
@@ -131,8 +212,10 @@ const getProviderProfile = async (userData) => {
 // Update Provider Profile (requires admin approval)
 const updateProviderProfile = async (req) => {
   const { files, body: data, user } = req;
-  
-  const existingProvider = await Provider.findOne({ authId: user.authId });
+
+  // Find the LATEST provider by authId
+  const existingProvider = await Provider.findOne({ authId: user.authId })
+    .sort({ createdAt: -1 });
   if (!existingProvider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
@@ -144,8 +227,8 @@ const updateProviderProfile = async (req) => {
   if (data.website) updateData.website = data.website;
   if (data.serviceLocation) updateData.serviceLocation = data.serviceLocation;
   if (data.coveredRadius) updateData.coveredRadius = parseFloat(data.coveredRadius);
-  if (data.contactPerson) updateData.contactPerson = JSON.parse(data.contactPerson);
-  
+  if (data.contactPerson) updateData.contactPerson = data.contactPerson;
+
   if (data.latitude && data.longitude) {
     updateData.latitude = parseFloat(data.latitude);
     updateData.longitude = parseFloat(data.longitude);
@@ -156,12 +239,8 @@ const updateProviderProfile = async (req) => {
   }
 
   // Handle file uploads
-  if (files && files.licenses) {
-    updateData.licenses = files.licenses.map(file => file.path);
-  }
-
-  if (files && files.certificates) {
-    updateData.certificates = files.certificates.map(file => file.path);
+  if (files && files.attachments) {
+    updateData.attachments = files.attachments.map(file => file.path);
   }
 
   // Store updates in pendingUpdates field for admin approval
@@ -175,7 +254,9 @@ const updateProviderProfile = async (req) => {
 const toggleProviderStatus = async (userData, payload) => {
   validateFields(payload, ["isActive"]);
 
-  const provider = await Provider.findOne({ authId: userData.authId });
+  // Find the LATEST provider by authId
+  const provider = await Provider.findOne({ authId: userData.authId })
+    .sort({ createdAt: -1 });
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
@@ -187,43 +268,106 @@ const toggleProviderStatus = async (userData, payload) => {
 };
 
 // Get Potential Requests for Provider
+// const getPotentialRequests = async (userData, query) => {
+//   // Find the LATEST provider by authId (same as getProviderProfile)
+//   const provider = await Provider.findOne({ authId: userData.authId })
+//     .sort({ createdAt: -1 });
+
+//   if (!provider || !provider.isActive) {
+//     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
+//   }
+
+//   // Find requests where this provider is in potentialProviders array with PENDING status
+//   const requests = await ServiceRequest.find({
+//     potentialProviders: {
+//       $elemMatch: {
+//         providerId: provider._id,
+//         status: "PENDING"
+//       }
+//     }
+//   })
+//     // .populate("customerId", "name email phoneNumber")
+//     .populate("serviceCategory", "name icon")
+//     // .populate("potentialProviders.providerId", "companyName")
+//     .lean();
+
+//   return {
+//     meta: {
+//       page: 1,
+//       limit: requests.length,
+//       total: requests.length,
+//       totalPages: 1,
+//     },
+//     requests: requests,
+//   };
+// };
+
 const getPotentialRequests = async (userData, query) => {
-  const provider = await Provider.findOne({ authId: userData.authId });
+  // Find the latest provider by authId
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({ createdAt: -1 });
+
   if (!provider || !provider.isActive) {
     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
   }
 
-  // Find requests that match provider's category and location
-  const requests = await ServiceRequest.find({
-    serviceCategory: provider.serviceCategory,
-    subcategory: provider.subcategory,
-    status: "PENDING",
-    "potentialProviders.providerId": { $ne: provider._id },
+  // Base query: match this provider inside potentialProviders array
+  const baseQuery = ServiceRequest.find({
+    potentialProviders: {
+      $elemMatch: {
+        providerId: provider._id,
+        // Optional filter by status if provided in query
+        ...(query.status ? { status: query.status } : { status: "PENDING" }),
+      },
+    },
   })
-    .populate("customerId", "name")
     .populate("serviceCategory", "name icon")
-    .select("requestId customerId serviceCategory subcategory priority createdAt")
     .lean();
 
-  // Filter by distance
-  const nearbyRequests = requests.filter(request => {
-    const distance = calculateDistance(
-      provider.latitude,
-      provider.longitude,
-      request.latitude,
-      request.longitude
-    );
-    return distance <= provider.coveredRadius && distance <= 50;
-  });
+  // Use QueryBuilder for filtering, sorting, pagination
+  const queryBuilder = new QueryBuilder(baseQuery, query)
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const requests = await queryBuilder.modelQuery;
+  const meta = await queryBuilder.countTotal();
+
+  return {
+    meta: {
+      page: meta.page,
+      limit: meta.limit,
+      total: meta.total,
+      totalPages: meta.totalPage,
+    },
+    requests,
+  };
+};
+
+
+const getPotentialRequestById = async (userData, query) => {
+  validateFields(query, ["requestId"]);
+
+  const provider = await Provider.findOne({ authId: userData.authId })
+    .sort({ createdAt: -1 });
+
+  if (!provider || !provider.isActive) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
+  }
+
+  const requests = await ServiceRequest.findById(query.requestId)
+    .populate("customerId", "name email phoneNumber")
+    .populate("serviceCategory", "name icon")
+    .lean();
 
   return {
     meta: {
       page: 1,
-      limit: nearbyRequests.length,
-      total: nearbyRequests.length,
+      limit: requests.length,
+      total: requests.length,
       totalPages: 1,
     },
-    requests: nearbyRequests,
+    requests: requests,
   };
 };
 
@@ -262,7 +406,9 @@ const getPotentialRequests = async (userData, query) => {
 const handleRequestResponse = async (userData, payload) => {
   validateFields(payload, ["requestId", "action"]);
 
-  const provider = await Provider.findOne({ authId: userData.authId });
+  // Find the LATEST provider by authId
+  const provider = await Provider.findOne({ authId: userData.authId })
+    .sort({ createdAt: -1 });
   const serviceRequest = await ServiceRequest.findById(payload.requestId);
 
   if (!provider || !serviceRequest) {
@@ -283,7 +429,7 @@ const handleRequestResponse = async (userData, payload) => {
       // Set status to PAYMENT_PENDING and redirect to payment
       serviceRequest.potentialProviders[potentialProviderIndex].status = "PAYMENT_PENDING";
       serviceRequest.status = "PAYMENT_PENDING";
-      
+
       // After successful payment, update status to ACCEPTED and PROCESSING
       serviceRequest.potentialProviders[potentialProviderIndex].status = "PAID";
       serviceRequest.potentialProviders[potentialProviderIndex].paidAt = new Date();
@@ -302,10 +448,10 @@ const handleRequestResponse = async (userData, payload) => {
   }
 
   await serviceRequest.save();
-  
+
   if (payload.action === "ACCEPT") {
-    return { 
-      message: "Request accepted successfully", 
+    return {
+      message: "Request accepted successfully",
       requiresPayment: serviceRequest.leadFee > 0,
       leadFee: serviceRequest.leadFee
     };
@@ -319,7 +465,9 @@ const markRequestComplete = async (req) => {
   const { files, body: data, user } = req;
   validateFields(data, ["requestId"]);
 
-  const provider = await Provider.findOne({ authId: user.authId });
+  // Find the LATEST provider by authId
+  const provider = await Provider.findOne({ authId: user.authId })
+    .sort({ createdAt: -1 });
   const serviceRequest = await ServiceRequest.findOne({
     _id: data.requestId,
     assignedProvider: provider._id,
@@ -345,7 +493,7 @@ const markRequestComplete = async (req) => {
 const getAllProviders = async (query) => {
   const providerQuery = new QueryBuilder(
     Provider.find({})
-      .populate("serviceCategory", "name icon")
+      .populate("serviceCategories", "name icon")
       .populate("authId", "name email")
       .lean(),
     query
@@ -367,7 +515,7 @@ const getAllProviders = async (query) => {
 // Get Provider by ID
 const getProviderById = async (id) => {
   const provider = await Provider.findById(id)
-    .populate("serviceCategory", "name icon")
+    .populate("serviceCategories", "name icon")
     .populate("authId", "name email");
 
   if (!provider) {
@@ -377,7 +525,27 @@ const getProviderById = async (id) => {
   return provider;
 };
 
+// Verify Provider (Admin)
+const verifyProvider = async (payload) => {
+  validateFields(payload, ["providerId", "isVerified"]);
 
+  const provider = await Provider.findById(payload.providerId);
+
+  if (!provider) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found");
+  }
+
+  const wasUnverified = !provider.isVerified;
+  provider.isVerified = payload.isVerified;
+  await provider.save();
+
+  // If provider just got verified and is active, match with pending requests
+  if (wasUnverified && payload.isVerified && provider.isActive) {
+    await matchProviderWithPendingRequests(provider);
+  }
+
+  return provider;
+};
 
 
 module.exports = {
@@ -386,8 +554,10 @@ module.exports = {
   updateProviderProfile,
   toggleProviderStatus,
   getPotentialRequests,
+  getPotentialRequestById,
   handleRequestResponse,
   markRequestComplete,
   getAllProviders,
   getProviderById,
+  verifyProvider,
 };
