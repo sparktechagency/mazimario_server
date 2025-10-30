@@ -11,9 +11,8 @@ const CategoryRoutes = require("../module/category/category.routes");
 const ManageRoutes = require("../module/manage/manage.routes");
 const ProviderRoutes = require("../module/provider/provider.routes")
 const NotificationRoutes = require("../module/notification/notification.routes")
-// const NotificationRoutes = require("../module/notification/notification.routes");
+const ReviewRoutes = require("../module/review/review.routes")
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
-// const ReviewRoutes = require("../module/review/review.routes");
 // const PostRoutes = require("../module/post/post.routes");
 // const SubscriptionPlanRoutes = require("../module/subscriptionPlan/subscriptionPlan.routes");
 // const PaymentRoutes = require("../module/payment/payment.routes");
@@ -50,6 +49,10 @@ const moduleRoutes = [
   {
     path: "/notification",
     route: NotificationRoutes
+  },
+  {
+    path: "/review",
+    route: ReviewRoutes
   },
   // {
   //   path: "/phone-verification",
