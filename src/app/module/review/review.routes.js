@@ -28,4 +28,19 @@ router
     ReviewController.deleteReview
   );
 
+
+  // get reviews for provider
+
+  router.get(
+    "/get-reviews-for-provider",
+    auth(config.auth_level.provider), // or user, depending on your roles
+    ReviewController.getReviewsForProvider
+  );
+
+  router.get(
+    "/get-provider-reviews",
+    auth(config.auth_level.provider),
+    ReviewController.getReviewsForProvider
+  );
+
 module.exports = router;

@@ -52,12 +52,25 @@ const deleteReview = catchAsync(async (req, res) => {
   });
 });
 
+const getReviewsForProvider = catchAsync(async (req, res) => {
+  // console.log("req.user",req.user);
+  const result = await ReviewService.getReviewsForProvider(req.user, req.query);
+  // console.log("result",result);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Provider reviews retrieved",
+    data: result,
+  });
+});
+
 const ReviewController = {
   postReview,
   getAllReviews,
   getReview,
   updateReview,
   deleteReview,
+  getReviewsForProvider,
 };
 
 module.exports = ReviewController;

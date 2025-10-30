@@ -40,7 +40,6 @@ const ProviderSchema = new Schema(
         day: {
           type: String,
           enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-          required: true,
           trim: true,
         },
         startTime: {
@@ -68,6 +67,10 @@ const ProviderSchema = new Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isRejected: {
+      type: Boolean,
+      default: false,
     },
     isVerified: {
       type: Boolean,

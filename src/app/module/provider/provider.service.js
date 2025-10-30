@@ -177,7 +177,7 @@ const getProviderProfile = async (userData) => {
     .populate("authId", "name email")
     .lean();
 
-  console.log("Found provider:", provider);
+  // console.log("Found provider:", provider);
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
@@ -541,7 +541,7 @@ const getProviderById = async (id) => {
 
 // Verify Provider (Admin)
 const verifyProvider = async (payload) => {
-  validateFields(payload, ["providerId", "isVerified"]);
+  validateFields(payload, ["providerId", "isVerified", "isRejected"]);
 
   const provider = await Provider.findById(payload.providerId);
 
@@ -551,6 +551,7 @@ const verifyProvider = async (payload) => {
 
   const wasUnverified = !provider.isVerified;
   provider.isVerified = payload.isVerified;
+  provider.isRejected = payload.isRejected;
   await provider.save();
 
   // If provider just got verified and is active, match with pending requests
@@ -560,7 +561,6 @@ const verifyProvider = async (payload) => {
 
   return provider;
 };
-
 
 
 // Get Providers with Pending Updates (Admin)

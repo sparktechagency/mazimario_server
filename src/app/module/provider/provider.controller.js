@@ -157,7 +157,6 @@ const ProviderController = {
   getAllProviders,  
   getProviderById,
   verifyProvider,
-  updateLiscence,
   getPendingProviderUpdates,
   approveProviderUpdate,
   rejectProviderUpdate,

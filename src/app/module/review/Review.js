@@ -19,6 +19,11 @@ const reviewSchema = new Schema(
       type: String,
       required: true,
     },
+    providerId: {
+      type: ObjectId,
+      ref: "Provider",
+      required: true,
+    },
   },
   {
     timestamps: true,
