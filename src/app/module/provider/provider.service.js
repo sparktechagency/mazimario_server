@@ -320,6 +320,7 @@ const getPotentialRequests = async (userData, query) => {
       },
     },
   })
+    .populate("customerId", "name email phoneNumber")
     .populate("serviceCategory", "name icon")
     .lean();
 
