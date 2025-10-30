@@ -112,6 +112,48 @@ const verifyProvider = catchAsync(async (req, res) => {
   });
 });
 
+const updateLiscence = catchAsync(async (req, res) => {
+  const result = await ProviderService.updateLiscence(req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Liscence updated successfully",
+    data: result,
+  });
+});
+
+// Get Providers with Pending Updates (Admin)
+const getPendingProviderUpdates = catchAsync(async (req, res) => {
+  const result = await ProviderService.getPendingProviderUpdates();
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Pending provider updates retrieved successfully",
+    data: result,
+  });
+});
+
+// Approve Provider Update (Admin)
+const approveProviderUpdate = catchAsync(async (req, res) => {
+  const result = await ProviderService.approveProviderUpdate(req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result.provider,
+  });
+});
+
+// Reject Provider Update (Admin)
+const rejectProviderUpdate = catchAsync(async (req, res) => {
+  const result = await ProviderService.rejectProviderUpdate(req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+  });
+});
+
 const ProviderController = {
   registerProvider,
   getProviderProfile,
@@ -124,6 +166,10 @@ const ProviderController = {
   getAllProviders,  
   getProviderById,
   verifyProvider,
+  updateLiscence,
+  getPendingProviderUpdates,
+  approveProviderUpdate,
+  rejectProviderUpdate,
 };
 
 module.exports = { ProviderController };

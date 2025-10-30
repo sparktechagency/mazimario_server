@@ -54,6 +54,12 @@ router
     auth(config.auth_level.provider),
     uploadFile([{ name: "completionProof", maxCount: 5 }]),
     ProviderController.markRequestComplete
+  )
+  .patch(
+    "/update-liscence",
+    auth(config.auth_level.provider),
+    uploadFile([{ name: "attachments", maxCount: 5 }]),
+    ProviderController.updateLiscence
   );
 
 // Admin routes
@@ -72,6 +78,21 @@ router
     "/verify",
     auth(config.auth_level.admin),
     ProviderController.verifyProvider
+  )
+  .get(
+    "/pending-updates",
+    auth(config.auth_level.admin),
+    ProviderController.getPendingProviderUpdates
+  )
+  .post(
+    "/approve-update",
+    auth(config.auth_level.admin),
+    ProviderController.approveProviderUpdate
+  )
+  .post(
+    "/reject-update",
+    auth(config.auth_level.admin),
+    ProviderController.rejectProviderUpdate
   );
 
 module.exports = router;

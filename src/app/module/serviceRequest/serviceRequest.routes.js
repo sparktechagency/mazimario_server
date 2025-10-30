@@ -53,7 +53,7 @@ router
   .get(
     "/get-all",
     auth(config.auth_level.admin),
-    ServiceRequestController.getServiceRequests
+    ServiceRequestController.getAllServiceRequests
   )
   .get(
     "/get-by-id",

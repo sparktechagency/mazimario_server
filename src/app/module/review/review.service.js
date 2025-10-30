@@ -7,34 +7,37 @@ const validateFields = require("../../../util/validateFields");
 const { default: mongoose } = require("mongoose");
 const { EnumUserRole } = require("../../../util/enum");
 const Review = require("./Review");
+const Provider = require("../provider/Provider");
+const User = require("../user/User");
+
 
 const postReview = async (userData, payload) => {
   validateFields(payload, ["rating", "review"]);
 
   const { userId } = userData;
-  const { carId } = payload || {};
+  const { providerId } = payload || {};
   const reviewData = {
     user: userId,
-    car: carId,
+    provider: providerId,
     ...payload,
   };
-  const carObjectId = mongoose.Types.ObjectId.createFromHexString(carId);
+  const providerObjectId = mongoose.Types.ObjectId.createFromHexString(providerId);
 
-  validateFields(payload, ["carId", "rating", "review"]);
+  validateFields(payload, ["providerId", "rating", "review"]);
 
-  const car = await Car.findById(payload.carId).select("user make").lean();
-  if (!car) throw new ApiError(status.NOT_FOUND, "Car not found");
-  reviewData.host = car.user;
+  const provider = await Provider.findById(payload.providerId).select("user make").lean();
+  if (!provider) throw new ApiError(status.NOT_FOUND, "Provider not found");
+  reviewData.host = provider.user;
 
   const result = await Review.create(reviewData);
 
-  const avgCarRatingAgg = await Review.aggregate([
+  const avgProviderRatingAgg = await Review.aggregate([
     {
-      $match: { car: carObjectId },
+      $match: { provider: providerObjectId },
     },
     {
       $group: {
-        _id: "$car",
+        _id: "$provider",
         avgRating: {
           $avg: "$rating",
         },
@@ -42,9 +45,9 @@ const postReview = async (userData, payload) => {
     },
   ]);
 
-  const avgHostRatingAgg = await Car.aggregate([
+  const avgHostRatingAgg = await User.aggregate([
     {
-      $match: { user: car.user },
+      $match: { _id: provider.user },
     },
     {
       $group: {
@@ -56,17 +59,17 @@ const postReview = async (userData, payload) => {
     },
   ]);
 
-  const avgCarRating = avgCarRatingAgg[0].avgRating.toFixed(2) ?? 0;
+  const avgProviderRating = avgProviderRatingAgg[0].avgRating.toFixed(2) ?? 0;
   const avgHostRating = avgHostRatingAgg[0].avgRating.toFixed(2) ?? 0;
 
   Promise.all([
-    Car.updateOne(
-      { _id: carId },
-      { rating: avgCarRating },
+    Provider.updateOne(
+      { _id: providerId },
+      { rating: avgProviderRating },
       { new: true, runValidators: true }
     ),
     User.updateOne(
-      { _id: car.user },
+      { _id: provider.user },
       { rating: avgHostRating },
       { new: true, runValidators: true }
     ),
@@ -75,7 +78,7 @@ const postReview = async (userData, payload) => {
   postNotification(
     "New Review Alert",
     `You've received a new ${payload.rating}-star review.`,
-    car.user
+    provider.user
   );
 
   return result;

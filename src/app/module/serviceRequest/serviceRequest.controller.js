@@ -62,6 +62,16 @@ const assignProviderToRequest = catchAsync(async (req, res) => {
   });
 });
 
+const getAllServiceRequests = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.getAllServiceRequests(req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Service requests retrieved successfully",
+    data: result,
+  });
+});
+
 const ServiceRequestController = {
   createServiceRequest,
   getServiceRequests,
@@ -69,6 +79,7 @@ const ServiceRequestController = {
   getServiceRequestByIdDetails,
   updateServiceRequestStatus,
   assignProviderToRequest,
+  getAllServiceRequests,
 };
 
 module.exports = { ServiceRequestController };

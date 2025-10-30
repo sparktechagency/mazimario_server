@@ -247,6 +247,12 @@ const updateProviderProfile = async (req) => {
   existingProvider.pendingUpdates = updateData;
   await existingProvider.save();
 
+  // Notify admin about the update request
+  await postNotification(
+    "Provider Update Request",
+    `${existingProvider.companyName} has submitted a profile update request for approval.`
+  );
+
   return { message: "Update request submitted for admin approval" };
 };
 
@@ -548,6 +554,91 @@ const verifyProvider = async (payload) => {
   return provider;
 };
 
+const updateLiscence = async (payload) => {
+  validateFields(payload, ["providerId", "attachments"]);
+
+  const provider = await Provider.findById(payload.providerId);
+
+  if (!provider) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found");
+  }
+
+  provider.attachments = payload.attachments;
+  await provider.save();
+
+  return provider;
+};
+
+// Get Providers with Pending Updates (Admin)
+const getPendingProviderUpdates = async () => {
+  const providers = await Provider.find({
+    pendingUpdates: { $ne: null }
+  })
+    .select("companyName email phone pendingUpdates createdAt updatedAt")
+    .populate("authId", "email")
+    .sort({ updatedAt: -1 });
+
+  return providers;
+};
+
+// Approve Provider Update (Admin)
+const approveProviderUpdate = async (payload) => {
+  validateFields(payload, ["providerId"]);
+
+  const provider = await Provider.findById(payload.providerId);
+  if (!provider) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found");
+  }
+
+  if (!provider.pendingUpdates) {
+    throw new ApiError(status.BAD_REQUEST, "No pending updates for this provider");
+  }
+
+  // Apply the pending updates to the provider
+  Object.assign(provider, provider.pendingUpdates);
+  
+  // Clear pending updates
+  provider.pendingUpdates = null;
+  await provider.save();
+
+  // Notify provider that their update was approved
+  await postNotification(
+    "Profile Update Approved",
+    "Your profile update request has been approved by admin.",
+    provider._id
+  );
+
+  return { message: "Provider update approved successfully", provider };
+};
+
+// Reject Provider Update (Admin)
+const rejectProviderUpdate = async (payload) => {
+  validateFields(payload, ["providerId"]);
+
+  const provider = await Provider.findById(payload.providerId);
+  if (!provider) {
+    throw new ApiError(status.NOT_FOUND, "Provider not found");
+  }
+
+  if (!provider.pendingUpdates) {
+    throw new ApiError(status.BAD_REQUEST, "No pending updates for this provider");
+  }
+
+  // Clear pending updates without applying them
+  provider.pendingUpdates = null;
+  await provider.save();
+
+  // Notify provider that their update was rejected
+  const reason = payload.reason || "No reason provided";
+  await postNotification(
+    "Profile Update Rejected",
+    `Your profile update request has been rejected by admin. Reason: ${reason}`,
+    provider._id
+  );
+
+  return { message: "Provider update rejected successfully" };
+};
+
 
 module.exports = {
   registerProvider,
@@ -561,4 +652,8 @@ module.exports = {
   getAllProviders,
   getProviderById,
   verifyProvider,
+  updateLiscence,
+  getPendingProviderUpdates,
+  approveProviderUpdate,
+  rejectProviderUpdate,
 };

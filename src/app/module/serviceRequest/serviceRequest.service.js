@@ -381,6 +381,28 @@ const assignProviderToRequest = async (userData, payload) => {
   return serviceRequest;
 };
 
+const getAllServiceRequests = async (query) => {
+  const serviceRequestQuery = new QueryBuilder(
+    ServiceRequest.find(query)
+      .populate("serviceCategory", "name icon")
+      .populate("assignedProvider", "companyName contactPerson phoneNumber")
+      .populate("customerId", "name email phoneNumber address")
+      .lean(),
+    query
+  )
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const [serviceRequests, meta] = await Promise.all([
+    serviceRequestQuery.modelQuery,
+    serviceRequestQuery.countTotal(),
+  ]);
+
+  return { meta, serviceRequests };
+};
+
 
 
 const ServiceRequestService = {
@@ -390,6 +412,7 @@ const ServiceRequestService = {
   getServiceRequestByIdDetails,
   updateServiceRequestStatus,
   assignProviderToRequest,
+  getAllServiceRequests,
 };
 
 module.exports = { ServiceRequestService };

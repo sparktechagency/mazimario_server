@@ -30,6 +30,12 @@ const UserSchema = new Schema(
     address: {
       type: String,
     },
+    latitude: {
+      type: String,
+    },
+    longitude: {
+      type: String,
+    },
     favorites: {
       categories: [{
         categoryId: {
