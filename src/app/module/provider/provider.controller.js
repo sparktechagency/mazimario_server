@@ -112,15 +112,6 @@ const verifyProvider = catchAsync(async (req, res) => {
   });
 });
 
-const updateLiscence = catchAsync(async (req, res) => {
-  const result = await ProviderService.updateLiscence(req.body);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Liscence updated successfully",
-    data: result,
-  });
-});
 
 // Get Providers with Pending Updates (Admin)
 const getPendingProviderUpdates = catchAsync(async (req, res) => {

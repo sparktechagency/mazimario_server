@@ -54,12 +54,6 @@ router
     auth(config.auth_level.provider),
     uploadFile([{ name: "completionProof", maxCount: 5 }]),
     ProviderController.markRequestComplete
-  )
-  .patch(
-    "/update-liscence",
-    auth(config.auth_level.provider),
-    uploadFile([{ name: "attachments", maxCount: 5 }]),
-    ProviderController.updateLiscence
   );
 
 // Admin routes

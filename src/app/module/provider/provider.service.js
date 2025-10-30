@@ -316,13 +316,18 @@ const getPotentialRequests = async (userData, query) => {
     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
   }
 
+  // Extract potentialProvider status filter from query (default to PENDING)
+  const providerStatus = query.providerStatus || "PENDING";
+  
+  // Remove providerStatus from query to avoid QueryBuilder confusion
+  const { providerStatus: _, status: __, ...cleanQuery } = query;
+
   // Base query: match this provider inside potentialProviders array
   const baseQuery = ServiceRequest.find({
     potentialProviders: {
       $elemMatch: {
         providerId: provider._id,
-        // Optional filter by status if provided in query
-        ...(query.status ? { status: query.status } : { status: "PENDING" }),
+        status: providerStatus, // Filter by potentialProviders status only
       },
     },
   })
@@ -330,8 +335,8 @@ const getPotentialRequests = async (userData, query) => {
     .populate("serviceCategory", "name icon")
     .lean();
 
-  // Use QueryBuilder for filtering, sorting, pagination
-  const queryBuilder = new QueryBuilder(baseQuery, query)
+  // Use QueryBuilder for filtering, sorting, pagination (without status field)
+  const queryBuilder = new QueryBuilder(baseQuery, cleanQuery)
     .filter()
     .sort()
     .paginate()
@@ -449,12 +454,14 @@ const handleRequestResponse = async (userData, payload) => {
       serviceRequest.assignedProvider = provider._id;
       serviceRequest.status = "PROCESSING";
     }
-  } else if (payload.action === "DECLINE") {
-    // Remove the provider from potential providers array when they decline
-    serviceRequest.potentialProviders.splice(potentialProviderIndex, 1);
+  } else if (payload.action === "DECLINE" || payload.action === "DECLINED") {
+    // Update provider status to DECLINED instead of removing
+    serviceRequest.potentialProviders[potentialProviderIndex].status = "DECLINED";
+    serviceRequest.potentialProviders[potentialProviderIndex].declinedAt = new Date();
   }
 
   await serviceRequest.save();
+
 
   if (payload.action === "ACCEPT") {
     return {
@@ -554,20 +561,7 @@ const verifyProvider = async (payload) => {
   return provider;
 };
 
-const updateLiscence = async (payload) => {
-  validateFields(payload, ["providerId", "attachments"]);
 
-  const provider = await Provider.findById(payload.providerId);
-
-  if (!provider) {
-    throw new ApiError(status.NOT_FOUND, "Provider not found");
-  }
-
-  provider.attachments = payload.attachments;
-  await provider.save();
-
-  return provider;
-};
 
 // Get Providers with Pending Updates (Admin)
 const getPendingProviderUpdates = async () => {
@@ -652,7 +646,6 @@ module.exports = {
   getAllProviders,
   getProviderById,
   verifyProvider,
-  updateLiscence,
   getPendingProviderUpdates,
   approveProviderUpdate,
   rejectProviderUpdate,
