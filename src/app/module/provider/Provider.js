@@ -100,7 +100,7 @@ const ProviderSchema = new Schema(
       },
       status: {
         type: String,
-        enum: ["PENDING", "AWAITING_PAYMENT", "ACCEPTED", "DECLINED", "PAID"],
+        enum: ["PENDING", "AWAITING_PAYMENT",  "ACCEPTED", "DECLINED", "PAID"],
         default: "PENDING",
       },
       acceptedAt: Date,

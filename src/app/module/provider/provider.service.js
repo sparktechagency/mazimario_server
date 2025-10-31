@@ -17,13 +17,55 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const dLon = deg2rad(lon2 - lon1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(deg2rad(lat1)) *
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
 const deg2rad = (deg) => deg * (Math.PI / 180);
+
+// Payment hold helpers (temporary until real payment integration)
+const isPaymentHoldActive = (serviceRequest) => {
+  if (!serviceRequest) return false;
+  if (serviceRequest.status !== "ON_PROCESS") return false;
+  if (!serviceRequest.paymentHoldUntil) return false;
+  if (serviceRequest.assignedProvider) return false;
+  return new Date(serviceRequest.paymentHoldUntil) > new Date();
+};
+
+const expirePaymentHoldIfNeeded = (serviceRequest) => {
+  if (!serviceRequest) return serviceRequest;
+  const now = new Date();
+  const holdExpired =
+    serviceRequest.status === "ON_PROCESS" &&
+    serviceRequest.paymentHoldUntil &&
+    new Date(serviceRequest.paymentHoldUntil) <= now &&
+    !serviceRequest.assignedProvider;
+
+  if (holdExpired) {
+    // Revert the held provider's status back to PENDING
+    if (serviceRequest.paymentHoldBy) {
+      const idx = serviceRequest.potentialProviders.findIndex(
+        (pp) =>
+          pp.providerId.toString() === serviceRequest.paymentHoldBy.toString()
+      );
+      if (idx !== -1) {
+        serviceRequest.potentialProviders[idx].status = "PENDING";
+        serviceRequest.potentialProviders[idx].paymentWindowStartedAt =
+          undefined;
+      }
+    }
+
+    serviceRequest.status = "PENDING";
+    serviceRequest.paymentHoldBy = undefined;
+    serviceRequest.paymentHoldUntil = undefined;
+  }
+
+  return serviceRequest;
+};
 
 // Helper function to match a provider with existing pending requests
 const matchProviderWithPendingRequests = async (provider) => {
@@ -38,7 +80,7 @@ const matchProviderWithPendingRequests = async (provider) => {
   for (const request of pendingRequests) {
     // Check if provider is already in potentialProviders
     const alreadyAdded = request.potentialProviders.some(
-      pp => pp.providerId.toString() === provider._id.toString()
+      (pp) => pp.providerId.toString() === provider._id.toString()
     );
 
     if (alreadyAdded) continue;
@@ -53,19 +95,21 @@ const matchProviderWithPendingRequests = async (provider) => {
 
     // Check if within range
     if (distance <= 50 && distance <= provider.coveredRadius) {
-      const hasAvailability = provider.workingHours.some(wh => wh.isAvailable);
-      
+      const hasAvailability = provider.workingHours.some(
+        (wh) => wh.isAvailable
+      );
+
       if (hasAvailability) {
         matchedRequests.push(request._id);
-        
+
         // Add provider to request's potentialProviders
         await ServiceRequest.findByIdAndUpdate(request._id, {
           $push: {
             potentialProviders: {
               providerId: provider._id,
-              status: "PENDING"
-            }
-          }
+              status: "PENDING",
+            },
+          },
         });
       }
     }
@@ -95,40 +139,48 @@ const registerProvider = async (req) => {
     "coveredRadius",
     "latitude",
     "longitude",
-    "workingHours"
+    "workingHours",
   ]);
 
   // Check if provider already exists with this auth ID
   const existingProvider = await Provider.findOne({ authId: user.authId });
 
-
   // Check if company name is already taken by another active provider
   const existingCompany = await Provider.findOne({
     companyName: data.companyName,
     isActive: true,
-    _id: { $ne: existingProvider?._id }
+    _id: { $ne: existingProvider?._id },
   });
 
   if (existingCompany) {
-    throw new ApiError(status.CONFLICT, "This company name is already registered. Please choose a different company name.");
+    throw new ApiError(
+      status.CONFLICT,
+      "This company name is already registered. Please choose a different company name."
+    );
   }
 
   // Parse and validate service categories (array of category IDs)
   const serviceCategories = JSON.parse(data.serviceCategories || "[]");
 
   if (!Array.isArray(serviceCategories) || serviceCategories.length === 0) {
-    throw new ApiError(status.BAD_REQUEST, "At least one service category is required");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "At least one service category is required"
+    );
   }
 
   // Validate all categories exist and are active
   for (const categoryId of serviceCategories) {
     const category = await Category.findOne({
       _id: categoryId,
-      isActive: true
+      isActive: true,
     });
 
     if (!category) {
-      throw new ApiError(status.BAD_REQUEST, `Invalid or inactive category: ${categoryId}`);
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `Invalid or inactive category: ${categoryId}`
+      );
     }
   }
 
@@ -147,7 +199,7 @@ const registerProvider = async (req) => {
 
   // Handle file uploads
   if (files && files.attachments) {
-    providerData.attachments = files.attachments.map(file => file.path);
+    providerData.attachments = files.attachments.map((file) => file.path);
   }
 
   const provider = await Provider.create(providerData);
@@ -167,7 +219,6 @@ const registerProvider = async (req) => {
   return provider;
 };
 
-
 // Get Provider Profile (full registration info)
 const getProviderProfile = async (userData) => {
   // Find the LATEST provider by authId (sort by createdAt desc)
@@ -184,15 +235,19 @@ const getProviderProfile = async (userData) => {
   }
 
   // Add stats
-  const [totalAssignedRequests, totalCompletedRequests, totalPendingRequests] = await Promise.all([
-    ServiceRequest.countDocuments({ assignedProvider: provider._id }),
-    ServiceRequest.countDocuments({ assignedProvider: provider._id, status: "COMPLETED" }),
-    ServiceRequest.countDocuments({
-      "potentialProviders.providerId": provider._id,
-      "potentialProviders.status": "PENDING",
-      assignedProvider: { $exists: false }
-    }),
-  ]);
+  const [totalAssignedRequests, totalCompletedRequests, totalPendingRequests] =
+    await Promise.all([
+      ServiceRequest.countDocuments({ assignedProvider: provider._id }),
+      ServiceRequest.countDocuments({
+        assignedProvider: provider._id,
+        status: "COMPLETED",
+      }),
+      ServiceRequest.countDocuments({
+        "potentialProviders.providerId": provider._id,
+        "potentialProviders.status": "PENDING",
+        assignedProvider: { $exists: false },
+      }),
+    ]);
 
   const profile = {
     ...provider,
@@ -200,22 +255,24 @@ const getProviderProfile = async (userData) => {
       totalAssignedRequests,
       totalCompletedRequests,
       totalPendingRequests,
-      acceptanceRate: totalAssignedRequests > 0 ?
-        (totalCompletedRequests / totalAssignedRequests * 100).toFixed(1) : 0,
+      acceptanceRate:
+        totalAssignedRequests > 0
+          ? ((totalCompletedRequests / totalAssignedRequests) * 100).toFixed(1)
+          : 0,
     },
   };
 
   return profile;
 };
 
-
 // Update Provider Profile (requires admin approval)
 const updateProviderProfile = async (req) => {
   const { files, body: data, user } = req;
 
   // Find the LATEST provider by authId
-  const existingProvider = await Provider.findOne({ authId: user.authId })
-    .sort({ createdAt: -1 });
+  const existingProvider = await Provider.findOne({ authId: user.authId }).sort(
+    { createdAt: -1 }
+  );
   if (!existingProvider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
@@ -226,7 +283,8 @@ const updateProviderProfile = async (req) => {
   if (data.companyName) updateData.companyName = data.companyName;
   if (data.website) updateData.website = data.website;
   if (data.serviceLocation) updateData.serviceLocation = data.serviceLocation;
-  if (data.coveredRadius) updateData.coveredRadius = parseFloat(data.coveredRadius);
+  if (data.coveredRadius)
+    updateData.coveredRadius = parseFloat(data.coveredRadius);
   if (data.contactPerson) updateData.contactPerson = data.contactPerson;
 
   if (data.latitude && data.longitude) {
@@ -240,7 +298,7 @@ const updateProviderProfile = async (req) => {
 
   // Handle file uploads
   if (files && files.attachments) {
-    updateData.attachments = files.attachments.map(file => file.path);
+    updateData.attachments = files.attachments.map((file) => file.path);
   }
 
   // Store updates in pendingUpdates field for admin approval
@@ -261,8 +319,9 @@ const toggleProviderStatus = async (userData, payload) => {
   validateFields(payload, ["isActive"]);
 
   // Find the LATEST provider by authId
-  const provider = await Provider.findOne({ authId: userData.authId })
-    .sort({ createdAt: -1 });
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({
+    createdAt: -1,
+  });
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
   }
@@ -310,7 +369,9 @@ const toggleProviderStatus = async (userData, payload) => {
 
 const getPotentialRequests = async (userData, query) => {
   // Find the latest provider by authId
-  const provider = await Provider.findOne({ authId: userData.authId }).sort({ createdAt: -1 });
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({
+    createdAt: -1,
+  });
 
   if (!provider || !provider.isActive) {
     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
@@ -318,7 +379,7 @@ const getPotentialRequests = async (userData, query) => {
 
   // Extract potentialProvider status filter from query (default to PENDING)
   const providerStatus = query.providerStatus || "PENDING";
-  
+
   // Remove providerStatus from query to avoid QueryBuilder confusion
   const { providerStatus: _, status: __, ...cleanQuery } = query;
 
@@ -356,12 +417,12 @@ const getPotentialRequests = async (userData, query) => {
   };
 };
 
-
 const getPotentialRequestById = async (userData, query) => {
   validateFields(query, ["requestId"]);
 
-  const provider = await Provider.findOne({ authId: userData.authId })
-    .sort({ createdAt: -1 });
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({
+    createdAt: -1,
+  });
 
   if (!provider || !provider.isActive) {
     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
@@ -419,55 +480,106 @@ const handleRequestResponse = async (userData, payload) => {
   validateFields(payload, ["requestId", "action"]);
 
   // Find the LATEST provider by authId
-  const provider = await Provider.findOne({ authId: userData.authId })
-    .sort({ createdAt: -1 });
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({
+    createdAt: -1,
+  });
   const serviceRequest = await ServiceRequest.findById(payload.requestId);
 
   if (!provider || !serviceRequest) {
     throw new ApiError(status.NOT_FOUND, "Provider or request not found");
   }
 
+  // Lazily expire any stale payment hold
+  expirePaymentHoldIfNeeded(serviceRequest);
+
   const potentialProviderIndex = serviceRequest.potentialProviders.findIndex(
-    pp => pp.providerId.toString() === provider._id.toString()
+    (pp) => pp.providerId.toString() === provider._id.toString()
   );
 
   if (potentialProviderIndex === -1) {
-    throw new ApiError(status.BAD_REQUEST, "Request not available for this provider");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Request not available for this provider"
+    );
   }
 
   if (payload.action === "ACCEPT") {
+    const now = new Date();
+
+    // If another provider currently holds the payment window, block
+    if (
+      isPaymentHoldActive(serviceRequest) &&
+      serviceRequest.paymentHoldBy &&
+      serviceRequest.paymentHoldBy.toString() !== provider._id.toString()
+    ) {
+      throw new ApiError(
+        status.CONFLICT,
+        "This request is currently in payment process by another provider. Please try again later."
+      );
+    }
+
     // Check if provider has already paid or needs to pay
     if (serviceRequest.leadFee > 0) {
-      // Set status to PAYMENT_PENDING and redirect to payment
-      serviceRequest.potentialProviders[potentialProviderIndex].status = "PAYMENT_PENDING";
-      serviceRequest.status = "PAYMENT_PENDING";
+      // Start a 5-minute payment hold window
+      const fiveMinutesMs = 5 * 60 * 1000;
+      serviceRequest.potentialProviders[potentialProviderIndex].status =
+        "PAYMENT_PENDING";
+      serviceRequest.potentialProviders[
+        potentialProviderIndex
+      ].paymentWindowStartedAt = now;
+      serviceRequest.status = "ON_PROCESS"; // visible to others as "on process"
+      serviceRequest.paymentHoldBy = provider._id;
+      serviceRequest.paymentHoldUntil = new Date(now.getTime() + fiveMinutesMs);
 
-      // After successful payment, update status to ACCEPTED and PROCESSING
-      serviceRequest.potentialProviders[potentialProviderIndex].status = "PAID";
-      serviceRequest.potentialProviders[potentialProviderIndex].paidAt = new Date();
-      serviceRequest.assignedProvider = provider._id;
-      serviceRequest.status = "PROCESSING";
+      // Do NOT assign yet; assignment will happen after payment confirmation
     } else {
       // No lead fee, directly assign to provider
-      serviceRequest.potentialProviders[potentialProviderIndex].status = "ACCEPTED";
-      serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt = new Date();
+      serviceRequest.potentialProviders[potentialProviderIndex].status =
+        "ACCEPTED";
+      serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt =
+        now;
       serviceRequest.assignedProvider = provider._id;
       serviceRequest.status = "PROCESSING";
+      // Clear any residual hold data
+      serviceRequest.paymentHoldBy = undefined;
+      serviceRequest.paymentHoldUntil = undefined;
     }
   } else if (payload.action === "DECLINE" || payload.action === "DECLINED") {
     // Update provider status to DECLINED instead of removing
-    serviceRequest.potentialProviders[potentialProviderIndex].status = "DECLINED";
-    serviceRequest.potentialProviders[potentialProviderIndex].declinedAt = new Date();
+    serviceRequest.potentialProviders[potentialProviderIndex].status =
+      "DECLINED";
+    serviceRequest.potentialProviders[potentialProviderIndex].declinedAt =
+      new Date();
+
+    // If the declining provider was holding the payment window, release it
+    if (
+      serviceRequest.paymentHoldBy &&
+      serviceRequest.paymentHoldBy.toString() === provider._id.toString()
+    ) {
+      serviceRequest.paymentHoldBy = undefined;
+      serviceRequest.paymentHoldUntil = undefined;
+      // Only revert main status if not assigned
+      if (!serviceRequest.assignedProvider) {
+        serviceRequest.status = "PENDING";
+      }
+    }
   }
 
   await serviceRequest.save();
-
+  await postNotification(
+    "Request " + payload.action.toLowerCase() + "ed",
+    "Your request has been " +
+      payload.action.toLowerCase() +
+      "ed by the provider.",
+    serviceRequest.customerId
+  );
 
   if (payload.action === "ACCEPT") {
     return {
       message: "Request accepted successfully",
       requiresPayment: serviceRequest.leadFee > 0,
-      leadFee: serviceRequest.leadFee
+      leadFee: serviceRequest.leadFee,
+      paymentHoldUntil: serviceRequest.paymentHoldUntil || null,
     };
   } else {
     return { message: "Request declined successfully" };
@@ -480,27 +592,102 @@ const markRequestComplete = async (req) => {
   validateFields(data, ["requestId"]);
 
   // Find the LATEST provider by authId
-  const provider = await Provider.findOne({ authId: user.authId })
-    .sort({ createdAt: -1 });
+  const provider = await Provider.findOne({ authId: user.authId }).sort({
+    createdAt: -1,
+  });
   const serviceRequest = await ServiceRequest.findOne({
     _id: data.requestId,
     assignedProvider: provider._id,
-    status: "IN_PROGRESS",
+    status: "PROCESSING",
   });
 
+  // console.log(
+  //   "serviceRequest",
+  //   await ServiceRequest.findOne({
+  //     _id: data.requestId,
+  //     assignedProvider: provider._id,
+  //     // status: "ACCEPTED",
+  //   })
+  // );
+
   if (!serviceRequest) {
-    throw new ApiError(status.NOT_FOUND, "Request not found or not assigned to you");
+    throw new ApiError(
+      status.NOT_FOUND,
+      "Request not found or not assigned to you"
+    );
   }
 
   // Handle completion proof uploads
   if (files && files.completionProof) {
-    serviceRequest.completionProof = files.completionProof.map(file => file.path);
+    serviceRequest.completionProof = files.completionProof.map(
+      (file) => file.path
+    );
   }
 
   serviceRequest.status = "COMPLETED";
   await serviceRequest.save();
+  await postNotification(
+    "Request Marked as Completed",
+    "Your request has been marked as completed by the provider.",
+    serviceRequest.customerId
+  );
 
   return { message: "Request marked as completed successfully" };
+};
+
+// Temporary helper: confirm payment to finalize assignment
+const confirmLeadPayment = async (userData, payload) => {
+  validateFields(payload, ["requestId"]);
+
+  // Find latest provider
+  const provider = await Provider.findOne({ authId: userData.authId }).sort({
+    createdAt: -1,
+  });
+  const serviceRequest = await ServiceRequest.findById(payload.requestId);
+
+  if (!provider || !serviceRequest) {
+    throw new ApiError(status.NOT_FOUND, "Provider or request not found");
+  }
+
+  // Expire stale hold if needed
+  expirePaymentHoldIfNeeded(serviceRequest);
+
+  // Must be the holding provider within window
+  if (
+    !serviceRequest.paymentHoldBy ||
+    serviceRequest.paymentHoldBy.toString() !== provider._id.toString()
+  ) {
+    throw new ApiError(
+      status.CONFLICT,
+      "No active payment window for this provider"
+    );
+  }
+
+  if (!isPaymentHoldActive(serviceRequest)) {
+    throw new ApiError(status.CONFLICT, "Payment window has expired");
+  }
+
+  // Finalize assignment
+  const idx = serviceRequest.potentialProviders.findIndex(
+    (pp) => pp.providerId.toString() === provider._id.toString()
+  );
+  if (idx === -1) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Provider not part of potential list"
+    );
+  }
+
+  serviceRequest.potentialProviders[idx].status = "PAID";
+  serviceRequest.potentialProviders[idx].paidAt = new Date();
+  serviceRequest.assignedProvider = provider._id;
+  serviceRequest.status = "PROCESSING";
+  serviceRequest.paymentHoldBy = undefined;
+  serviceRequest.paymentHoldUntil = undefined;
+
+  await serviceRequest.save();
+
+  return { message: "Payment confirmed and request assigned" };
 };
 
 // Get All Providers (Admin)
@@ -509,6 +696,7 @@ const getAllProviders = async (query) => {
     Provider.find({})
       .populate("serviceCategories", "name icon")
       .populate("authId", "name email")
+      .populate("assignedProvider", "companyName email phoneNumber")
       .lean(),
     query
   )
@@ -562,11 +750,10 @@ const verifyProvider = async (payload) => {
   return provider;
 };
 
-
 // Get Providers with Pending Updates (Admin)
 const getPendingProviderUpdates = async () => {
   const providers = await Provider.find({
-    pendingUpdates: { $ne: null }
+    pendingUpdates: { $ne: null },
   })
     .select("companyName email phone pendingUpdates createdAt updatedAt")
     .populate("authId", "email")
@@ -585,15 +772,19 @@ const approveProviderUpdate = async (payload) => {
   }
 
   if (!provider.pendingUpdates) {
-    throw new ApiError(status.BAD_REQUEST, "No pending updates for this provider");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "No pending updates for this provider"
+    );
   }
 
   // Apply the pending updates to the provider
   Object.assign(provider, provider.pendingUpdates);
-  
+
   // Clear pending updates
   provider.pendingUpdates = null;
   await provider.save();
+  console.log("provider", provider._id);
 
   // Notify provider that their update was approved
   await postNotification(
@@ -601,6 +792,13 @@ const approveProviderUpdate = async (payload) => {
     "Your profile update request has been approved by admin.",
     provider._id
   );
+  // console.log(
+  //   await postNotification(
+  //     "Profile Update Approved",
+  //     "Your profile update request has been approved by admin.",
+  //     provider._id
+  //   )
+  // );
 
   return { message: "Provider update approved successfully", provider };
 };
@@ -615,7 +813,10 @@ const rejectProviderUpdate = async (payload) => {
   }
 
   if (!provider.pendingUpdates) {
-    throw new ApiError(status.BAD_REQUEST, "No pending updates for this provider");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "No pending updates for this provider"
+    );
   }
 
   // Clear pending updates without applying them
@@ -633,7 +834,6 @@ const rejectProviderUpdate = async (payload) => {
   return { message: "Provider update rejected successfully" };
 };
 
-
 module.exports = {
   registerProvider,
   getProviderProfile,
@@ -642,6 +842,7 @@ module.exports = {
   getPotentialRequests,
   getPotentialRequestById,
   handleRequestResponse,
+  confirmLeadPayment,
   markRequestComplete,
   getAllProviders,
   getProviderById,
