@@ -31,6 +31,11 @@ const config = {
     expires_in: process.env.JWT_EXPIRES_IN,
     refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN,
   },
+  google: {
+    serverClientId: process.env.GOOGLE_SERVER_CLIENT_ID,
+    androidClientId: process.env.GOOGLE_CLIENT_ID_ANDROID,
+    iosClientId: process.env.GOOGLE_CLIENT_ID_IOS,
+  },
   smtp: {
     smtp_host: process.env.SMTP_HOST,
     smtp_port: process.env.SMTP_PORT,

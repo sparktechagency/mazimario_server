@@ -98,6 +98,25 @@ const resetPassword = catchAsync(async (req, res) => {
   });
 });
 
+const googleLogin = catchAsync(async (req, res) => {
+  const result = await AuthService.googleLogin(req.body);
+
+  const cookieOptions = {
+    secure: config.env === "production",
+    httpOnly: true,
+  };
+
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Login successful",
+    data: result,
+  });
+});
+
+
 const AuthController = {
   registrationAccount,
   activateAccount,
@@ -107,6 +126,7 @@ const AuthController = {
   resetPassword,
   forgetPassOtpVerify,
   resendActivationCode,
+  googleLogin,
 };
 
 module.exports = { AuthController };
