@@ -22,8 +22,19 @@ const AuthSchema = new Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
-      select: false,
+      required: function () {
+        return this.provider === "local";
+      }
+    },
+    provider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
+
+    googleId: {
+      type: String,
+      sparse: true
     },
     role: {
       type: String,

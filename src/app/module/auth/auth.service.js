@@ -1,7 +1,6 @@
 const bcrypt = require("bcrypt");
 const cron = require("node-cron");
 const { status } = require("http-status");
-
 const ApiError = require("../../../error/ApiError");
 const config = require("../../../config");
 const { jwtHelpers } = require("../../../util/jwtHelpers");
@@ -15,7 +14,8 @@ const validateFields = require("../../../util/validateFields");
 const EmailHelpers = require("../../../util/emailHelpers");
 const Admin = require("../admin/Admin");
 const Provider = require("../provider/Provider");
-
+const {OAuth2Client} = require("google-auth-library");
+const client = new OAuth2Client(config.google.serverClientId);
 
 const registrationAccount = async (payload) => {
   const { role, name, password, confirmPassword, email } = payload;
@@ -402,6 +402,108 @@ const hashPass = async (newPassword) => {
   return await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
 };
 
+const googleLogin = async (payload) => {
+  const { idToken, provider } = payload;
+
+  if (provider !== "google")
+    throw new ApiError(status.BAD_REQUEST, "Invalid provider");
+
+  // Verify Google Token
+  let ticket;
+  try {
+    ticket = await client.verifyIdToken({
+      idToken,
+      audience: config.google.serverClientId,
+    });
+  } catch (err) {
+    throw new ApiError(status.UNAUTHORIZED, "Invalid Google token");
+  }
+
+  const googleData = ticket.getPayload();
+  const { email, name, sub: googleId } = googleData;
+
+  if (!email)
+    throw new ApiError(status.BAD_REQUEST, "Email not found in Google data");
+
+  // Check if auth exists
+  let auth = await Auth.findOne({ email });
+
+  // If exists, login directly
+  if (auth) {
+    if (auth.isBlocked)
+      throw new ApiError(status.FORBIDDEN, "Your account is blocked");
+
+    return await finalizeGoogleLogin(auth);
+  }
+
+  // Create new auth for Google user
+  auth = await Auth.create({
+    name,
+    email,
+    provider: "google",
+    googleId,
+    isActive: true,
+    isVerified: true,
+    role: EnumUserRole.USER, // default role
+  });
+
+  // Create user (NOT admin/provider/super admin)
+  const userData = await User.create({
+    authId: auth._id,
+    name,
+    email,
+  });
+
+  return await finalizeGoogleLogin(auth, userData._id);
+};
+
+
+// Helper to unify response
+const finalizeGoogleLogin = async (auth, userId) => {
+
+  let profile;
+  switch (auth.role) {
+    case EnumUserRole.SUPER_ADMIN:
+      profile = await SuperAdmin.findOne({ authId: auth._id }).populate("authId").lean();
+      break;
+    case EnumUserRole.ADMIN:
+      profile = await Admin.findOne({ authId: auth._id }).populate("authId").lean();
+      break;
+    case EnumUserRole.PROVIDER:
+      profile = await Provider.findOne({ authId: auth._id }).populate("authId").lean();
+      break;
+    default:
+      profile = await User.findOne({ authId: auth._id }).populate("authId").lean();
+  }
+
+  const payload = {
+    authId: auth._id,
+    userId: userId || profile._id,
+    email: auth.email,
+    role: auth.role,
+  };
+
+  const accessToken = jwtHelpers.createToken(
+    payload,
+    config.jwt.secret,
+    config.jwt.expires_in
+  );
+
+  const refreshToken = jwtHelpers.createToken(
+    payload,
+    config.jwt.refresh_secret,
+    config.jwt.refresh_expires_in
+  );
+
+  return {
+    user: profile,
+    accessToken,
+    refreshToken,
+  };
+};
+
+
+
 // Unset activationCode activationCodeExpire field for expired activation code
 // Unset isVerified, verificationCode, verificationCodeExpire field for expired verification code
 cron.schedule("* * * * *", async () => {
@@ -422,6 +524,7 @@ const AuthService = {
   activateAccount,
   forgetPassOtpVerify,
   resendActivationCode,
+  googleLogin,
 };
 
 module.exports = { AuthService };
