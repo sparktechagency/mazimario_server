@@ -212,18 +212,22 @@ const createServiceRequest = async (req) => {
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);
 
-  // Send notification to user
-  await postNotification(
-    "Service Request Created",
-    `Your service request for ${selectedSubcategory.name} has been created successfully. Request ID: ${serviceRequest.requestId}`,
-    user.userId
-  );
+  //send notification
+  await Promise.all([
 
-  // Send notification to admin
-  await postNotification(
-    "New Service Request Created",
-    `New service request for ${selectedSubcategory.name} has been created by ${user.name || 'a customer'}. Request ID: ${serviceRequest.requestId}`
-  );
+    // Send notification to user
+    postNotification(
+      "Service Request Created",
+      `Your service request for ${selectedSubcategory.name} has been created successfully. Request ID: ${serviceRequest.requestId}`,
+      user.userId
+    ),
+  
+    // Send notification to admin
+    postNotification(
+      "New Service Request Created",
+      `New service request for ${selectedSubcategory.name} has been created by ${user.name || 'a customer'}. Request ID: ${serviceRequest.requestId}`
+    )
+  ]);
 
   // STEP 1: Find matching providers
   const matchingProviders = await findMatchingProviders(serviceRequestData);
@@ -315,7 +319,53 @@ const getServiceRequestById = async (query) => {
     throw new ApiError(status.NOT_FOUND, "Service request not found");
   }
 
-  return serviceRequest;
+  //find matching providers
+  const eligibleProviders = await findMatchingProviders({serviceCategory: serviceRequest?.serviceCategory?._id , latitude:serviceRequest?.latitude , longitude: serviceRequest?.longitude });
+
+  // return eligibleProviders;
+  console.log(eligibleProviders);
+  //get details of all relevant providers
+  const providerIds = eligibleProviders.map(id => new mongoose.Types.ObjectId(id));
+
+  const providersWithUserData = await Provider.aggregate([
+        {
+          $match: {
+            _id: { $in: providerIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "auths", // name of the User collection in MongoDB
+            localField: "authId", // field in Provider collection
+            foreignField: "_id", // matching field in User collection
+            as: "providerDetails",
+          },
+        },
+        {
+          $unwind: {
+            path: "$providerDetails",
+            preserveNullAndEmptyArrays: true, // keep provider even if no user found
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            authId: 1,
+            serviceLocation: 1,
+            companyName: 1,
+            image: null,
+            "providerDetails.name": 1,
+            "providerDetails.email": 1,
+            // "providerDetails.profile_image": 1,
+            // "providerDetails.address": 1,
+          },
+        },
+  ]);
+
+  // console.log(providersWithUserData);
+
+
+  return {serviceRequest,providers: providersWithUserData};
 };
 
 const getServiceRequestByIdDetails = async (userData, query) => {
@@ -403,6 +453,83 @@ const getAllServiceRequests = async (query) => {
   return { meta, serviceRequests };
 };
 
+const getAllProviderService = async (query) => {
+  const { serviceCategory, latitude, longitude } = query;
+
+  validateFields(query,["serviceCategory","latitude","longitude"]);
+
+  // Find providers who have this serviceCategory in their serviceCategories array
+  const matchingProviders = await Provider.find({
+    serviceCategories: serviceCategory, // ✅ CORRECT: Check array inclusion
+    // ❌ REMOVED: subcategory (providers don't have subcategories)
+    isActive: true,
+    isVerified: true,
+  }).select("_id coveredRadius latitude longitude workingHours");
+
+  const eligibleProviders = [];
+  const userLat = parseFloat(latitude);
+  const userLon = parseFloat(longitude);
+
+  for (const provider of matchingProviders) {
+    // Check distance
+    const distance = calculateDistance(
+      userLat,
+      userLon,
+      provider.latitude,
+      provider.longitude
+    );
+
+    if (distance <= 50 && distance <= provider.coveredRadius) {
+      const hasAvailability = provider.workingHours.some(
+        (wh) => wh.isAvailable
+      );
+      if (hasAvailability) {
+        eligibleProviders.push(provider._id);
+      }
+    }
+  }
+
+  // return eligibleProviders;
+  console.log(eligibleProviders);
+  //get details of all relevant providers
+  const providerIds = eligibleProviders.map(id => new mongoose.Types.ObjectId(id));
+
+  const providersWithUserData = await Provider.aggregate([
+        {
+          $match: {
+            _id: { $in: providerIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "users", // name of the User collection in MongoDB
+            localField: "authId", // field in Provider collection
+            foreignField: "authId", // matching field in User collection
+            as: "userDetails",
+          },
+        },
+        {
+          $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true, // keep provider even if no user found
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            authId: 1,
+            "userDetails.name": 1,
+            "userDetails.email": 1,
+            "userDetails.profile_image": 1,
+            "userDetails.address": 1,
+          },
+        },
+  ]);
+  console.log(providersWithUserData);
+
+ return providersWithUserData;
+}
+
 
 
 const ServiceRequestService = {
@@ -413,6 +540,7 @@ const ServiceRequestService = {
   updateServiceRequestStatus,
   assignProviderToRequest,
   getAllServiceRequests,
+  getAllProviderService
 };
 
 module.exports = { ServiceRequestService };

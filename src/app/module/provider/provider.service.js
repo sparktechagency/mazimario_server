@@ -566,13 +566,35 @@ const handleRequestResponse = async (userData, payload) => {
   }
 
   await serviceRequest.save();
-  await postNotification(
-    "Request " + payload.action.toLowerCase() + "ed",
-    "Your request has been " +
-      payload.action.toLowerCase() +
-      "ed by the provider.",
-    serviceRequest.customerId
-  );
+
+  //send notification
+  await Promise.all([
+    //send notification to customer
+     postNotification(
+      "Request " + payload.action.toLowerCase() + "ed",
+      "Your request has been " +
+        payload.action.toLowerCase() +
+        "ed by the provider.",
+      serviceRequest.customerId
+    ),
+
+    //send notification to provider
+     postNotification(
+      "You " + payload.action.toLowerCase() + "ed a new service request",
+      "Service category : " + serviceRequest.subcategory + " , address: " + serviceRequest.address + " , customer contact: " + serviceRequest.customerPhone + ", priority level: " + serviceRequest.priority
+      ,
+      provider._id
+    ),
+
+    //send notification to admin
+     postNotification(
+      "A new service request found service provider",
+      "A service provider accepted a new service request from a customer. Service address: " + serviceRequest.address + ", priority level: " + serviceRequest.priority
+      ,
+      serviceRequest.customerId
+    )
+  ]);
+
 
   if (payload.action === "ACCEPT") {
     return {

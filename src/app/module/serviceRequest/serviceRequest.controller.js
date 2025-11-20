@@ -62,12 +62,22 @@ const assignProviderToRequest = catchAsync(async (req, res) => {
   });
 });
 
+const getAllProvider = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.getAllProviderService(req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Service requests retrieved successfully",
+    data: result,
+  });
+});
+
 const getAllServiceRequests = catchAsync(async (req, res) => {
   const result = await ServiceRequestService.getAllServiceRequests(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "Service requests retrieved successfully",
+    message: "Filtered all provider successfully",
     data: result,
   });
 });
@@ -79,6 +89,7 @@ const ServiceRequestController = {
   getServiceRequestByIdDetails,
   updateServiceRequestStatus,
   assignProviderToRequest,
+  getAllProvider,
   getAllServiceRequests,
 };
 

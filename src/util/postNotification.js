@@ -8,9 +8,13 @@ const postNotification = async (title, message, toId = null) => {
   }
 
   if (!toId) {
+    
     return await AdminNotification.create({ title, message });
+  }else{
+
+    return await Notification.create({ toId, title, message });
   }
-  return await Notification.create({ toId, title, message });
+
 };
 
 module.exports = postNotification;

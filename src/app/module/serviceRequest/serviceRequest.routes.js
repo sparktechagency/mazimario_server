@@ -60,6 +60,10 @@ router
     auth(config.auth_level.admin),
     ServiceRequestController.getServiceRequestById
   )
+  // .get(
+  //   "/get-all-provider",
+  //   ServiceRequestController.getAllProvider
+  // )
   .patch(
     "/assign-provider",
     auth(config.auth_level.admin),
