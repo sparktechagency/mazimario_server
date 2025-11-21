@@ -260,6 +260,8 @@ const createServiceRequest = async (req) => {
         `A new ${selectedSubcategory.name} service request is available in your area. Request ID: ${serviceRequest.requestId}`,
         providerId
       );
+
+      console.log("Notification sent to provider", providerId);
     }
 
     await serviceRequest.save();

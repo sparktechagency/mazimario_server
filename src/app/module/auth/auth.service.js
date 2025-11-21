@@ -16,6 +16,7 @@ const Admin = require("../admin/Admin");
 const Provider = require("../provider/Provider");
 const {OAuth2Client} = require("google-auth-library");
 const client = new OAuth2Client(config.google.serverClientId);
+//need notification while new user or provider register....
 
 const registrationAccount = async (payload) => {
   const { role, name, password, confirmPassword, email } = payload;
