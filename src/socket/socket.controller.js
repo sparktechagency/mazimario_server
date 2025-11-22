@@ -1,147 +1,284 @@
-const { default: status } = require("http-status");
+// src/socket/socket.controller.js
+// Unified socket controller for ALL socket events.
 
-// const User = require("../app/module/user/User");
-
-const emitError = require("./emitError");
-const socketCatchAsync = require("../util/socketCatchAsync");
-const postNotification = require("../util/postNotification");
-const emitResult = require("./emitResult");
+const mongoose = require("mongoose");
 const { EnumSocketEvent } = require("../util/enum");
-const validateSocketFields = require("../util/validateSocketFields");
+const emitError = require("./emitError");
+const emitResult = require("./emitResult");
+const socketCatchAsync = require("../util/socketCatchAsync");
 
-const validateUser = socketCatchAsync(async (socket, io, payload) => {
-  if (!payload.userId) {
-    emitError(
-      socket,
-      status.BAD_REQUEST,
-      "userId is required to connect",
-      "disconnect"
-    );
-    return null;
+// MODELS
+const Conversation = require("../app/module/chat/conversation.model");
+const Message = require("../app/module/chat/message.model");
+const User = require("../app/module/user/User");
+const Provider = require("../app/module/provider/Provider");
+const Admin = require("../app/module/admin/Admin");
+const SuperAdmin = require("../app/module/superAdmin/SuperAdmin");
+
+// ONLINE USERS MAP
+const onlineUsers = new Map();
+
+// RANDOM MATCH QUEUE
+let waitingUsers = []; // { id, role, username, image, socketId }
+
+// ------------------------------
+// Utility
+// ------------------------------
+function roleRoom(role, id) {
+  return `${role}:${id}`;
+}
+
+async function findActor(id, role) {
+  switch (role) {
+    case "USER": return User.findById(id).lean();
+    case "PROVIDER": return Provider.findById(id).lean();
+    case "ADMIN": return Admin.findById(id).lean();
+    case "SUPER_ADMIN": return SuperAdmin.findById(id).lean();
+    default:
+      return (
+        (await User.findById(id).lean()) ||
+        (await Provider.findById(id).lean()) ||
+        (await Admin.findById(id).lean()) ||
+        (await SuperAdmin.findById(id).lean()) ||
+        (await Owner.findById(id).lean())
+      );
   }
+}
 
-  const user = await User.findById(payload.userId);
+function emitTo(io, target, event, payload) {
+  if (!target) return;
 
-  if (!user) {
-    emitError(socket, status.NOT_FOUND, "User not found", "disconnect");
-    return null;
+  if (typeof target === "string") {
+    io.to(target).emit(event, payload);
+  } else if (target.id && target.role) {
+    io.to(roleRoom(target.role, target.id)).emit(event, payload);
   }
+}
 
-  return user;
-});
+// ------------------------------
+// MAIN CONTROLLER
+// ------------------------------
+module.exports = function socketController(io) {
+  io.on(EnumSocketEvent.CONNECTION, async (socket) => {
+    console.log("SOCKET CONNECTED:", socket.id);
 
-const updateOnlineStatus = socketCatchAsync(async (socket, io, payload) => {
-  validateSocketFields(socket, payload, ["userId", "isOnline"]);
-  const { userId, isOnline } = payload;
+    const userId = socket.handshake.query.id;
+    const userRole = (socket.handshake.query.role || "USER").toUpperCase();
 
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    { isOnline },
-    { new: true }
-  );
+    if (!userId) {
+      emitError(socket, 400, "Missing userId", true);
+      return;
+    }
 
-  socket.emit(
-    EnumSocketEvent.ONLINE_STATUS,
-    emitResult({
-      statusCode: status.OK,
-      success: true,
-      message: `You are ${updatedUser.isOnline ? "online" : "offline"}`,
-      data: { isOnline: updatedUser.isOnline },
-    })
-  );
-});
+    const myRoom = roleRoom(userRole, userId);
+    socket.join(myRoom);
+    onlineUsers.set(myRoom, socket.id);
 
-const updateLocation = socketCatchAsync(async (socket, io, payload) => {
-  validateSocketFields(socket, payload, ["userId", "lat", "long"]);
+    socket._meta = { id: userId, role: userRole, room: myRoom };
 
-  const { userId, lat, long } = payload;
-
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    { locationCoordinates: { coordinates: [Number(long), Number(lat)] } },
-    { new: true, runValidators: true }
-  );
-
-  // Broadcast to everyone (consider throttling in production)
-  io.emit(
-    EnumSocketEvent.LOCATION_UPDATE,
-    emitResult({
-      statusCode: status.OK,
-      success: true,
-      message: "Location updated",
-      data: updatedUser,
-    })
-  );
-});
-
-// utility functions =============================================================================================================================
-
-const handleStatusNotifications = (io, trip, newStatus) => {
-  const eventName = EnumSocketEvent.TRIP_UPDATE_STATUS;
-  const messageMap = {
-    [TripStatus.ON_THE_WAY]: {
-      rider: "Your driver is on the way",
-      driver: "You are on the way to the rider",
-    },
-    [TripStatus.ARRIVED]: {
-      rider: "Your driver has arrived",
-      driver: "You have arrived at the pickup location",
-    },
-    [TripStatus.PICKED_UP]: {
-      rider: "You've been picked up",
-      driver: "You have picked up the rider",
-    },
-    [TripStatus.STARTED]: {
-      rider: "Your trip has started",
-      driver: "The trip has started",
-    },
-    [TripStatus.COMPLETED]: {
-      rider: "Your trip has been completed successfully",
-      driver: "You have successfully completed the trip",
-    },
-    [TripStatus.CANCELLED]: {
-      rider: "Your trip has been cancelled",
-      driver: "The trip has been cancelled",
-    },
-    [TripStatus.NO_SHOW]: {
-      rider: "You are marked as no show. You will be charged a fee",
-      driver: "The user is marked as no show",
-    },
-  };
-
-  // Notify user
-  io.to(trip.user.toString()).emit(
-    eventName,
-    emitResult({
-      statusCode: status.OK,
-      success: true,
-      message: messageMap[newStatus].rider,
-      data: trip,
-    })
-  );
-
-  postNotification(`Trip update`, messageMap[newStatus].rider, trip.user);
-
-  // Notify driver if any
-  if (trip.driver) {
-    io.to(trip.driver.toString()).emit(
-      eventName,
+    socket.emit(
+      EnumSocketEvent.CONNECT,
       emitResult({
-        statusCode: status.OK,
+        statusCode: 200,
         success: true,
-        message: messageMap[newStatus].driver,
-        data: trip,
+        message: "Connected to socket",
+        data: { room: myRoom }
       })
     );
 
-    postNotification(`Trip update`, messageMap[newStatus].driver, trip.driver);
-  }
-};
+    // ------------------------------
+    // TYPING EVENTS
+    // ------------------------------
+    socket.on("typing", ({ conversationId, sender, receiver }) => {
+      emitTo(io, receiver, "typing", { conversationId, sender });
+    });
 
-const SocketController = {
-  validateUser,
-  updateOnlineStatus,
-  updateLocation,
-};
+    socket.on("stop_typing", ({ conversationId, sender, receiver }) => {
+      emitTo(io, receiver, "stop_typing", { conversationId, sender });
+    });
 
-module.exports = SocketController;
+    // ------------------------------
+    // PING / PONG
+    // ------------------------------
+    socket.on("ping", (data) => socket.emit("pong", data));
+
+    // ------------------------------
+    // RANDOM MATCH
+    // ------------------------------
+    socket.on("join-random", (data) => {
+      const id = data.currentUserId || userId;
+      const role = (data.role || userRole).toUpperCase();
+
+      if (waitingUsers.some((u) => u.id === id)) {
+        return socket.emit("match-status", { message: "Already waiting" });
+      }
+
+      if (waitingUsers.length > 0) {
+        const index = Math.floor(Math.random() * waitingUsers.length);
+        const matched = waitingUsers.splice(index, 1)[0];
+
+        const callId = `call_${matched.id}_${id}`;
+
+        emitTo(io, matched, `match-found/${matched.id}`, {
+          callId,
+          userId: id,
+          username: data.username,
+          image: data.image,
+          role
+        });
+
+        emitTo(io, { id, role }, `match-found/${id}`, {
+          callId,
+          userId: matched.id,
+          username: matched.username,
+          image: matched.image,
+          role: matched.role
+        });
+
+        return;
+      }
+
+      waitingUsers.push({
+        id,
+        role,
+        username: data.username,
+        image: data.image,
+        socketId: socket.id
+      });
+
+      socket.emit("match-status", { message: "Waiting" });
+    });
+
+    socket.on("cancel-waiting", (id) => {
+      waitingUsers = waitingUsers.filter((u) => u.id !== id);
+      socket.emit("match-status", { message: "Removed from waiting list" });
+    });
+
+    // ------------------------------
+    // MARK MESSAGES AS READ
+    // ------------------------------
+    socket.on(
+      EnumSocketEvent.MARK_MESSAGES_AS_READ,
+      socketCatchAsync(async ({ conversationId, myId, myRole, senderId, senderRole }) => {
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) {
+          return emitError(socket, 404, "Conversation not found");
+        }
+
+        await Message.updateMany(
+          {
+            conversationId,
+            "receiver.id": myId,
+            "receiver.role": myRole,
+            seen: false
+          },
+          { $set: { seen: true } }
+        );
+
+        emitTo(io, { id: myId, role: myRole }, EnumSocketEvent.MARK_MESSAGES_AS_READ, {
+          conversationId,
+          seen: true
+        });
+
+        emitTo(io, { id: senderId, role: senderRole }, EnumSocketEvent.MARK_MESSAGES_AS_READ, {
+          conversationId,
+          seen: true
+        });
+      })
+    );
+
+    // ------------------------------
+    // SEND MESSAGE
+    // ------------------------------
+    socket.on(
+      EnumSocketEvent.MESSAGE_NEW,
+      socketCatchAsync(async (payload) => {
+        const { sender, receiver, text, images, video, videoCover } = payload;
+
+        if (!sender?.id || !receiver?.id) {
+          return emitError(socket, 400, "Sender and receiver required");
+        }
+
+        let conversation = await Conversation.findOne({
+          "participants.id": { $all: [sender.id, receiver.id] }
+        });
+
+        if (!conversation) {
+          conversation = await Conversation.create({
+            participants: [
+              { id: sender.id, role: sender.role },
+              { id: receiver.id, role: receiver.role }
+            ],
+            messages: []
+          });
+        }
+
+        const newMessage = await Message.create({
+          conversationId: conversation._id,
+          sender,
+          receiver,
+          text: text || "",
+          images: images || [],
+          video: video || "",
+          videoCover: videoCover || "",
+          seen: false
+        });
+
+        conversation.messages.push(newMessage._id);
+        conversation.updatedAt = new Date();
+        await conversation.save();
+
+        // send to receiver
+        emitTo(
+          io,
+          receiver,
+          `${EnumSocketEvent.MESSAGE_NEW}/${sender.id}`,
+          newMessage
+        );
+
+        // send to sender
+        emitTo(
+          io,
+          sender,
+          `${EnumSocketEvent.MESSAGE_NEW}/${receiver.id}`,
+          newMessage
+        );
+
+        // conversation updates
+        const convoUpdate = {
+          conversationId: conversation._id,
+          participants: conversation.participants,
+          lastMessage: newMessage,
+          updatedAt: conversation.updatedAt
+        };
+
+        emitTo(
+          io,
+          receiver,
+          `${EnumSocketEvent.CONVERSATION_UPDATE}/${receiver.id}`,
+          convoUpdate
+        );
+        emitTo(
+          io,
+          sender,
+          `${EnumSocketEvent.CONVERSATION_UPDATE}/${sender.id}`,
+          convoUpdate
+        );
+      })
+    );
+
+    // ------------------------------
+    // DISCONNECT
+    // ------------------------------
+    socket.on(EnumSocketEvent.DISCONNECT, () => {
+      onlineUsers.delete(myRoom);
+      console.log("USER DISCONNECTED:", myRoom);
+    });
+
+    socket.on("error", (e) => {
+      console.error("Socket error:", e);
+    });
+  });
+
+  return { onlineUsers, waitingUsers };
+};
