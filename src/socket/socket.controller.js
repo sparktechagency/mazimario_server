@@ -46,13 +46,36 @@ async function findActor(id, role) {
 }
 
 function emitTo(io, target, event, payload) {
-  if (!target) return;
-
-  if (typeof target === "string") {
-    io.to(target).emit(event, payload);
-  } else if (target.id && target.role) {
-    io.to(roleRoom(target.role, target.id)).emit(event, payload);
+  if (!target) {
+    console.warn("⚠️  emitTo: target is null/undefined");
+    return;
   }
+
+  let roomName;
+  if (typeof target === "string") {
+    roomName = target;
+  } else if (target.id && target.role) {
+    roomName = roleRoom(target.role.toUpperCase(), target.id);
+  } else {
+    console.warn("⚠️  emitTo: invalid target format", target);
+    return;
+  }
+
+  console.log(`   📤 Emitting "${event}" to room: ${roomName}`);
+  
+  // Get sockets in the room to verify delivery
+  io.in(roomName).fetchSockets().then(sockets => {
+    if (sockets.length > 0) {
+      console.log(`   ✅ Event "${event}" delivered to ${sockets.length} socket(s) in room ${roomName}`);
+      sockets.forEach(socket => {
+        console.log(`      - Socket ID: ${socket.id}`);
+      });
+    } else {
+      console.warn(`   ⚠️  No sockets found in room ${roomName} - event "${event}" not delivered!`);
+    }
+  });
+  
+  io.to(roomName).emit(event, payload);
 }
 
 // ------------------------------
@@ -76,8 +99,12 @@ module.exports = function socketController(io) {
 
     socket._meta = { id: userId, role: userRole, room: myRoom };
 
+    console.log("   User joined room:", myRoom);
+    console.log("   Total online users:", onlineUsers.size);
+
+    // Use CONNECTION_CONFIRMED instead of CONNECT (which is reserved by Socket.IO)
     socket.emit(
-      EnumSocketEvent.CONNECT,
+      EnumSocketEvent.CONNECTION_CONFIRMED,
       emitResult({
         statusCode: 200,
         success: true,
@@ -188,84 +215,172 @@ module.exports = function socketController(io) {
     );
 
     // ------------------------------
-    // SEND MESSAGE
+    // SEND MESSAGE HANDLER
     // ------------------------------
-    socket.on(
-      EnumSocketEvent.MESSAGE_NEW,
-      socketCatchAsync(async (payload) => {
-        const { sender, receiver, text, images, video, videoCover } = payload;
+    const handleSendMessage = socketCatchAsync(async (payload) => {
+      const { sender, receiver, text, images, video, videoCover } = payload;
 
-        if (!sender?.id || !receiver?.id) {
-          return emitError(socket, 400, "Sender and receiver required");
-        }
+      console.log("\n📨 MESSAGE RECEIVED:");
+      console.log("   From:", sender);
+      console.log("   To:", receiver);
+      console.log("   Text:", text);
 
-        let conversation = await Conversation.findOne({
-          "participants.id": { $all: [sender.id, receiver.id] }
+      if (!sender?.id || !receiver?.id) {
+        console.error("❌ Missing sender or receiver");
+        return emitError(socket, 400, "Sender and receiver required");
+      }
+
+      // Check if receiver is online
+      const receiverRoom = roleRoom(receiver.role.toUpperCase(), receiver.id);
+      const senderRoom = roleRoom(sender.role.toUpperCase(), sender.id);
+      
+      console.log("   Receiver Room:", receiverRoom);
+      console.log("   Sender Room:", senderRoom);
+      console.log("   Receiver Online:", onlineUsers.has(receiverRoom));
+      console.log("   Sender Online:", onlineUsers.has(senderRoom));
+
+      // Get all sockets in the receiver's room to verify
+      const receiverRoomSockets = await io.in(receiverRoom).fetchSockets();
+      console.log("   Sockets in receiver room:", receiverRoomSockets.length);
+
+      let conversation = await Conversation.findOne({
+        "participants.id": { $all: [sender.id, receiver.id] }
+      });
+
+      if (!conversation) {
+        console.log("   Creating new conversation");
+        conversation = await Conversation.create({
+          participants: [
+            { id: sender.id, role: sender.role },
+            { id: receiver.id, role: receiver.role }
+          ],
+          messages: []
         });
+      } else {
+        console.log("   Using existing conversation:", conversation._id);
+      }
 
-        if (!conversation) {
-          conversation = await Conversation.create({
-            participants: [
-              { id: sender.id, role: sender.role },
-              { id: receiver.id, role: receiver.role }
-            ],
-            messages: []
-          });
-        }
+      const newMessage = await Message.create({
+        conversationId: conversation._id,
+        sender,
+        receiver,
+        text: text || "",
+        images: images || [],
+        video: video || "",
+        videoCover: videoCover || "",
+        seen: false
+      });
 
-        const newMessage = await Message.create({
-          conversationId: conversation._id,
-          sender,
-          receiver,
-          text: text || "",
-          images: images || [],
-          video: video || "",
-          videoCover: videoCover || "",
-          seen: false
-        });
+      console.log("   Message saved to DB:", newMessage._id);
 
-        conversation.messages.push(newMessage._id);
-        conversation.updatedAt = new Date();
-        await conversation.save();
+      conversation.messages.push(newMessage._id);
+      conversation.updatedAt = new Date();
+      await conversation.save();
 
-        // send to receiver
-        emitTo(
-          io,
-          receiver,
-          `${EnumSocketEvent.MESSAGE_NEW}/${sender.id}`,
-          newMessage
-        );
+      // send to receiver
+      const receiverEvent = `${EnumSocketEvent.MESSAGE_NEW}/${sender.id}`;
+      console.log("   Emitting to receiver:", receiverEvent, "Room:", receiverRoom);
+      emitTo(
+        io,
+        receiver,
+        receiverEvent,
+        newMessage
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'message_new' to receiver");
+      emitTo(
+        io,
+        receiver,
+        EnumSocketEvent.MESSAGE_NEW,
+        newMessage
+      );
 
-        // send to sender
-        emitTo(
-          io,
-          sender,
-          `${EnumSocketEvent.MESSAGE_NEW}/${receiver.id}`,
-          newMessage
-        );
+      // send to sender
+      const senderEvent = `${EnumSocketEvent.MESSAGE_NEW}/${receiver.id}`;
+      console.log("   Emitting to sender:", senderEvent, "Room:", senderRoom);
+      emitTo(
+        io,
+        sender,
+        senderEvent,
+        newMessage
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'message_new' to sender");
+      emitTo(
+        io,
+        sender,
+        EnumSocketEvent.MESSAGE_NEW,
+        newMessage
+      );
 
-        // conversation updates
-        const convoUpdate = {
-          conversationId: conversation._id,
-          participants: conversation.participants,
-          lastMessage: newMessage,
-          updatedAt: conversation.updatedAt
-        };
+      // conversation updates
+      const convoUpdate = {
+        conversationId: conversation._id,
+        participants: conversation.participants,
+        lastMessage: newMessage,
+        updatedAt: conversation.updatedAt
+      };
 
-        emitTo(
-          io,
-          receiver,
-          `${EnumSocketEvent.CONVERSATION_UPDATE}/${receiver.id}`,
-          convoUpdate
-        );
-        emitTo(
-          io,
-          sender,
-          `${EnumSocketEvent.CONVERSATION_UPDATE}/${sender.id}`,
-          convoUpdate
-        );
-      })
-    );
+      const receiverConvoEvent = `${EnumSocketEvent.CONVERSATION_UPDATE}/${receiver.id}`;
+      console.log("   Emitting conversation update to receiver:", receiverConvoEvent);
+      emitTo(
+        io,
+        receiver,
+        receiverConvoEvent,
+        convoUpdate
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'conversation_update' to receiver");
+      emitTo(
+        io,
+        receiver,
+        EnumSocketEvent.CONVERSATION_UPDATE,
+        convoUpdate
+      );
+
+      const senderConvoEvent = `${EnumSocketEvent.CONVERSATION_UPDATE}/${sender.id}`;
+      console.log("   Emitting conversation update to sender:", senderConvoEvent);
+      emitTo(
+        io,
+        sender,
+        senderConvoEvent,
+        convoUpdate
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'conversation_update' to sender");
+      emitTo(
+        io,
+        sender,
+        EnumSocketEvent.CONVERSATION_UPDATE,
+        convoUpdate
+      );
+
+      console.log("✅ Message processing complete\n");
+    });
+
+    // Support both event names for compatibility
+    socket.on(EnumSocketEvent.MESSAGE_NEW, handleSendMessage);
+    socket.on(EnumSocketEvent.SEND_MESSAGE, handleSendMessage);
+
+    // Debug: List all online users
+    socket.on("debug-online-users", () => {
+      console.log("\n📊 ONLINE USERS DEBUG:");
+      console.log("   Total online:", onlineUsers.size);
+      onlineUsers.forEach((socketId, room) => {
+        console.log(`   Room: ${room} -> Socket: ${socketId}`);
+      });
+      socket.emit("debug-online-users-response", {
+        total: onlineUsers.size,
+        users: Array.from(onlineUsers.entries()).map(([room, socketId]) => ({
+          room,
+          socketId
+        }))
+      });
+    });
 
     // ------------------------------
     // DISCONNECT

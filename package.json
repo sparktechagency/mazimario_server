@@ -30,6 +30,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^7.0.10",
     "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "stream": "^0.0.3",
     "stripe": "^17.7.0",
     "twilio": "^5.9.0",
