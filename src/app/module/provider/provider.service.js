@@ -297,8 +297,14 @@ const updateProviderProfile = async (req) => {
   }
 
   // Handle file uploads
-  if (files && files.attachments) {
+  if (files && files.profile_image) {
+    // Only ONE profile image allowed
+    updateData.profile_image = files.profile_image[0].path;
+  } else if (files && files.attachments) {
     updateData.attachments = files.attachments.map((file) => file.path);
+  } else {
+    updateData.profile_image = existingProvider.profile_image;
+    updateData.attachments = existingProvider.attachments;
   }
 
   // Store updates in pendingUpdates field for admin approval
@@ -570,7 +576,7 @@ const handleRequestResponse = async (userData, payload) => {
   //send notification
   await Promise.all([
     //send notification to customer
-     postNotification(
+    postNotification(
       "Request " + payload.action.toLowerCase() + "ed",
       "Your request has been " +
         payload.action.toLowerCase() +
@@ -579,22 +585,29 @@ const handleRequestResponse = async (userData, payload) => {
     ),
 
     //send notification to provider
-     postNotification(
+    postNotification(
       "You " + payload.action.toLowerCase() + "ed a new service request",
-      "Service category : " + serviceRequest.subcategory + " , address: " + serviceRequest.address + " , customer contact: " + serviceRequest.customerPhone + ", priority level: " + serviceRequest.priority
-      ,
+      "Service category : " +
+        serviceRequest.subcategory +
+        " , address: " +
+        serviceRequest.address +
+        " , customer contact: " +
+        serviceRequest.customerPhone +
+        ", priority level: " +
+        serviceRequest.priority,
       provider._id
     ),
 
     //send notification to admin
-     postNotification(
+    postNotification(
       "A new service request found service provider",
-      "A service provider accepted a new service request from a customer. Service address: " + serviceRequest.address + ", priority level: " + serviceRequest.priority
-      ,
+      "A service provider accepted a new service request from a customer. Service address: " +
+        serviceRequest.address +
+        ", priority level: " +
+        serviceRequest.priority,
       serviceRequest.customerId
-    )
+    ),
   ]);
-
 
   if (payload.action === "ACCEPT") {
     return {

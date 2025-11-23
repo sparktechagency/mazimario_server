@@ -26,6 +26,7 @@ router
     auth(config.auth_level.provider),
     uploadFile([
       { name: "attachments", maxCount: 5 },
+      { name: "profile_image", maxCount: 1 },
     ]),
     ProviderController.updateProviderProfile
   )

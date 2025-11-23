@@ -83,4 +83,47 @@ const uploadFile = () => {
   return upload;
 };
 
-module.exports = { uploadFile };
+// Separate upload function for chat files
+const uploadChatFiles = () => {
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      const uploadPath = `uploads/${file.fieldname}`;
+      createDirIfNotExists(uploadPath);
+      if (isValidFileType(file.mimetype)) {
+        cb(null, uploadPath);
+      } else {
+        cb(new Error("Invalid file type"));
+      }
+    },
+    filename: function (req, file, cb) {
+      const name = Date.now() + "-" + file.originalname;
+      if (!req.uploadedFiles) req.uploadedFiles = [];
+      const filePath = `uploads/${file.fieldname}/${name}`;
+      req.uploadedFiles.push(filePath);
+      cb(null, name);
+    },
+  });
+
+  const fileFilter = (req, file, cb) => {
+    const allowedFieldNames = ["chatImage", "chatVideo", "chatVideoCover"];
+    if (!file.fieldname) return cb(null, true);
+    if (!allowedFieldNames.includes(file.fieldname))
+      return cb(new Error("Invalid fieldname"));
+    if (isValidFileType(file.mimetype)) return cb(null, true);
+    else return cb(new Error("Invalid file type"));
+  };
+
+  return multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: 50 * 1024 * 1024,
+    },
+  }).fields([
+    { name: "chatImage", maxCount: 10 },
+    { name: "chatVideo", maxCount: 1 },
+    { name: "chatVideoCover", maxCount: 1 },
+  ]);
+};
+
+module.exports = { uploadFile, uploadChatFiles };

@@ -12,6 +12,7 @@ const ManageRoutes = require("../module/manage/manage.routes");
 const ProviderRoutes = require("../module/provider/provider.routes")
 const NotificationRoutes = require("../module/notification/notification.routes")
 const ReviewRoutes = require("../module/review/review.routes")
+const ChatRoutes = require("../module/chat/conversation.router")
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
 // const PostRoutes = require("../module/post/post.routes");
 // const SubscriptionPlanRoutes = require("../module/subscriptionPlan/subscriptionPlan.routes");
@@ -53,6 +54,10 @@ const moduleRoutes = [
   {
     path: "/review",
     route: ReviewRoutes
+  },
+  {
+    path: "/chat",
+    route: ChatRoutes
   },
   // {
   //   path: "/phone-verification",

@@ -18,6 +18,7 @@ const AdminSchema = new Schema(
     },
     profile_image: {
       type: String,
+      default: null,
     },
     phoneNumber: {
       type: String,

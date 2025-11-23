@@ -39,9 +39,91 @@ async function findActor(id, role) {
         (await User.findById(id).lean()) ||
         (await Provider.findById(id).lean()) ||
         (await Admin.findById(id).lean()) ||
-        (await SuperAdmin.findById(id).lean()) ||
-        (await Owner.findById(id).lean())
+        (await SuperAdmin.findById(id).lean())
       );
+  }
+}
+
+/**
+ * Helper to resolve profile by role & id with name, email, profilePic
+ * Returns { _id, name, email, profilePic, role } or null.
+ */
+async function findProfile(id, role) {
+  if (!id) return null;
+  role = (role || "").toUpperCase();
+  try {
+    switch (role) {
+      case "USER": {
+        const user = await User.findById(id).select("name email profile_image role").lean();
+        if (!user) return null;
+        return {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          profilePic: user.profile_image || null,
+          role: user.role || "USER"
+        };
+      }
+      case "PROVIDER": {
+        const provider = await Provider.findById(id).populate("authId", "name email").select("role").lean();
+        if (!provider || !provider.authId) return null;
+        return {
+          _id: provider._id,
+          name: provider.authId.name || null,
+          email: provider.authId.email || null,
+          profilePic: null,
+          role: provider.role || "PROVIDER"
+        };
+      }
+      case "ADMIN": {
+        const admin = await Admin.findById(id).populate("authId", "name email").select("role").lean();
+        if (!admin || !admin.authId) return null;
+        return {
+          _id: admin._id,
+          name: admin.authId.name || null,
+          email: admin.authId.email || null,
+          profilePic: null,
+          role: admin.role || "ADMIN"
+        };
+      }
+      case "SUPER_ADMIN": {
+        const superAdmin = await SuperAdmin.findById(id).populate("authId", "name email").select("role").lean();
+        if (!superAdmin || !superAdmin.authId) return null;
+        return {
+          _id: superAdmin._id,
+          name: superAdmin.authId.name || null,
+          email: superAdmin.authId.email || null,
+          profilePic: null,
+          role: superAdmin.role || "SUPER_ADMIN"
+        };
+      }
+      default: {
+        const user = await User.findById(id).select("name email profile_image role").lean();
+        if (user) {
+          return {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            profilePic: user.profile_image || null,
+            role: user.role || "USER"
+          };
+        }
+        const provider = await Provider.findById(id).populate("authId", "name email").select("role").lean();
+        if (provider && provider.authId) {
+          return {
+            _id: provider._id,
+            name: provider.authId.name || null,
+            email: provider.authId.email || null,
+            profilePic: null,
+            role: provider.role || "PROVIDER"
+          };
+        }
+        return null;
+      }
+    }
+  } catch (e) {
+    console.error("findProfile error:", e);
+    return null;
   }
 }
 
@@ -277,6 +359,29 @@ module.exports = function socketController(io) {
       conversation.updatedAt = new Date();
       await conversation.save();
 
+      // Populate sender and receiver profiles
+      const [senderProfile, receiverProfile] = await Promise.all([
+        findProfile(sender.id, sender.role),
+        findProfile(receiver.id, receiver.role)
+      ]);
+
+      // Create populated message object
+      const populatedMessage = {
+        ...newMessage.toObject(),
+        sender: {
+          ...sender,
+          name: senderProfile?.name || null,
+          email: senderProfile?.email || null,
+          profilePic: senderProfile?.profilePic || null
+        },
+        receiver: {
+          ...receiver,
+          name: receiverProfile?.name || null,
+          email: receiverProfile?.email || null,
+          profilePic: receiverProfile?.profilePic || null
+        }
+      };
+
       // send to receiver
       const receiverEvent = `${EnumSocketEvent.MESSAGE_NEW}/${sender.id}`;
       console.log("   Emitting to receiver:", receiverEvent, "Room:", receiverRoom);
@@ -284,7 +389,7 @@ module.exports = function socketController(io) {
         io,
         receiver,
         receiverEvent,
-        newMessage
+        populatedMessage
       );
       
       // Also emit to generic event name for easier Postman testing
@@ -293,7 +398,7 @@ module.exports = function socketController(io) {
         io,
         receiver,
         EnumSocketEvent.MESSAGE_NEW,
-        newMessage
+        populatedMessage
       );
 
       // send to sender
@@ -303,7 +408,7 @@ module.exports = function socketController(io) {
         io,
         sender,
         senderEvent,
-        newMessage
+        populatedMessage
       );
       
       // Also emit to generic event name for easier Postman testing
@@ -312,14 +417,14 @@ module.exports = function socketController(io) {
         io,
         sender,
         EnumSocketEvent.MESSAGE_NEW,
-        newMessage
+        populatedMessage
       );
 
       // conversation updates
       const convoUpdate = {
         conversationId: conversation._id,
         participants: conversation.participants,
-        lastMessage: newMessage,
+        lastMessage: populatedMessage,
         updatedAt: conversation.updatedAt
       };
 

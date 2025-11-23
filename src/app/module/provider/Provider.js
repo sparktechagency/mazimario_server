@@ -89,6 +89,10 @@ const ProviderSchema = new Schema(
       type: Number,
       default: 0,
     },
+    profile_image: {
+      type: String,
+      default: null,
+    },
     pendingUpdates: {
       type: Schema.Types.Mixed,
       default: null,
