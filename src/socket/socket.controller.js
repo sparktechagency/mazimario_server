@@ -6,6 +6,7 @@ const { EnumSocketEvent } = require("../util/enum");
 const emitError = require("./emitError");
 const emitResult = require("./emitResult");
 const socketCatchAsync = require("../util/socketCatchAsync");
+const conversationController = require("../app/module/chat/conversation.controller");
 
 // MODELS
 const Conversation = require("../app/module/chat/conversation.model");
@@ -65,35 +66,35 @@ async function findProfile(id, role) {
         };
       }
       case "PROVIDER": {
-        const provider = await Provider.findById(id).populate("authId", "name email").select("role").lean();
+        const provider = await Provider.findById(id).populate("authId", "name email").select("role").select("profile_image").lean();
         if (!provider || !provider.authId) return null;
         return {
           _id: provider._id,
           name: provider.authId.name || null,
           email: provider.authId.email || null,
-          profilePic: null,
+          profilePic: provider.profile_image || null,
           role: provider.role || "PROVIDER"
         };
       }
       case "ADMIN": {
-        const admin = await Admin.findById(id).populate("authId", "name email").select("role").lean();
+        const admin = await Admin.findById(id).populate("authId", "name email").select("role").select("profile_image").lean();
         if (!admin || !admin.authId) return null;
         return {
           _id: admin._id,
           name: admin.authId.name || null,
           email: admin.authId.email || null,
-          profilePic: null,
+          profilePic: admin.profile_image || null,
           role: admin.role || "ADMIN"
         };
       }
       case "SUPER_ADMIN": {
-        const superAdmin = await SuperAdmin.findById(id).populate("authId", "name email").select("role").lean();
+        const superAdmin = await SuperAdmin.findById(id).populate("authId", "name email").select("role").select("profile_image").lean();
         if (!superAdmin || !superAdmin.authId) return null;
         return {
           _id: superAdmin._id,
           name: superAdmin.authId.name || null,
           email: superAdmin.authId.email || null,
-          profilePic: null,
+          profilePic: superAdmin.profile_image || null,
           role: superAdmin.role || "SUPER_ADMIN"
         };
       }
@@ -108,7 +109,7 @@ async function findProfile(id, role) {
             role: user.role || "USER"
           };
         }
-        const provider = await Provider.findById(id).populate("authId", "name email").select("role").lean();
+        const provider = await Provider.findById(id).populate("authId", "name email").select("role").select("profile_image").lean();
         if (provider && provider.authId) {
           return {
             _id: provider._id,
@@ -420,10 +421,204 @@ module.exports = function socketController(io) {
         populatedMessage
       );
 
+      const handleSendMessage = socketCatchAsync(async (payload) => {
+      const { sender, receiver, text, images, video, videoCover } = payload;
+
+      console.log("\n📨 MESSAGE RECEIVED:");
+      console.log("   From:", sender);
+      console.log("   To:", receiver);
+      console.log("   Text:", text);
+
+      if (!sender?.id || !receiver?.id) {
+        console.error("❌ Missing sender or receiver");
+        return emitError(socket, 400, "Sender and receiver required");
+      }
+
+      // Check if receiver is online
+      const receiverRoom = roleRoom(receiver.role.toUpperCase(), receiver.id);
+      const senderRoom = roleRoom(sender.role.toUpperCase(), sender.id);
+      
+      console.log("   Receiver Room:", receiverRoom);
+      console.log("   Sender Room:", senderRoom);
+      console.log("   Receiver Online:", onlineUsers.has(receiverRoom));
+      console.log("   Sender Online:", onlineUsers.has(senderRoom));
+
+      // Get all sockets in the receiver's room to verify
+      const receiverRoomSockets = await io.in(receiverRoom).fetchSockets();
+      console.log("   Sockets in receiver room:", receiverRoomSockets.length);
+
+      let conversation = await Conversation.findOne({
+        "participants.id": { $all: [sender.id, receiver.id] }
+      });
+
+      if (!conversation) {
+        console.log("   Creating new conversation");
+        conversation = await Conversation.create({
+          participants: [
+            { id: sender.id, role: sender.role },
+            { id: receiver.id, role: receiver.role }
+          ],
+          messages: []
+        });
+      } else {
+        console.log("   Using existing conversation:", conversation._id);
+      }
+
+      const newMessage = await Message.create({
+        conversationId: conversation._id,
+        sender,
+        receiver,
+        text: text || "",
+        images: images || [],
+        video: video || "",
+        videoCover: videoCover || "",
+        seen: false
+      });
+
+      console.log("   Message saved to DB:", newMessage._id);
+
+      conversation.messages.push(newMessage._id);
+      conversation.updatedAt = new Date();
+      await conversation.save();
+
+      // Populate sender and receiver profiles
+      const [senderProfile, receiverProfile] = await Promise.all([
+        findProfile(sender.id, sender.role),
+        findProfile(receiver.id, receiver.role)
+      ]);
+
+      // Create populated message object
+      const populatedMessage = {
+        ...newMessage.toObject(),
+        sender: {
+          ...sender,
+          name: senderProfile?.name || null,
+          email: senderProfile?.email || null,
+          profilePic: senderProfile?.profilePic || null
+        },
+        receiver: {
+          ...receiver,
+          name: receiverProfile?.name || null,
+          email: receiverProfile?.email || null,
+          profilePic: receiverProfile?.profilePic || null
+        }
+      };
+
+      // send to receiver
+      const receiverEvent = `${EnumSocketEvent.MESSAGE_NEW}/${sender.id}`;
+      console.log("   Emitting to receiver:", receiverEvent, "Room:", receiverRoom);
+      emitTo(
+        io,
+        receiver,
+        receiverEvent,
+        populatedMessage
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'message_new' to receiver");
+      emitTo(
+        io,
+        receiver,
+        EnumSocketEvent.MESSAGE_NEW,
+        populatedMessage
+      );
+
+      // send to sender
+      const senderEvent = `${EnumSocketEvent.MESSAGE_NEW}/${receiver.id}`;
+      console.log("   Emitting to sender:", senderEvent, "Room:", senderRoom);
+      emitTo(
+        io,
+        sender,
+        senderEvent,
+        populatedMessage
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'message_new' to sender");
+      emitTo(
+        io,
+        sender,
+        EnumSocketEvent.MESSAGE_NEW,
+        populatedMessage
+      );
+
+      const enrichedParticipants = await Promise.all(
+        conversation.participants.map(async (p) => {
+          const profile = await findProfile(p.id, p.role);
+          return {
+            id: p.id,
+            name: profile?.name || "Unknown",
+            email: profile?.email || null,
+            profilePic: profile?.profilePic || null,
+            role: p.role
+          };
+        })
+      );
+
       // conversation updates
       const convoUpdate = {
         conversationId: conversation._id,
-        participants: conversation.participants,
+        participants: enrichedParticipants,
+        lastMessage: populatedMessage,
+        updatedAt: conversation.updatedAt
+      };
+
+      const receiverConvoEvent = `${EnumSocketEvent.CONVERSATION_UPDATE}/${receiver.id}`;
+      console.log("   Emitting conversation update to receiver:", receiverConvoEvent);
+      emitTo(
+        io,
+        receiver,
+        receiverConvoEvent,
+        convoUpdate
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'conversation_update' to receiver");
+      emitTo(
+        io,
+        receiver,
+        EnumSocketEvent.CONVERSATION_UPDATE,
+        convoUpdate
+      );
+
+      const senderConvoEvent = `${EnumSocketEvent.CONVERSATION_UPDATE}/${sender.id}`;
+      console.log("   Emitting conversation update to sender:", senderConvoEvent);
+      emitTo(
+        io,
+        sender,
+        senderConvoEvent,
+        convoUpdate
+      );
+      
+      // Also emit to generic event name for easier Postman testing
+      console.log("   Also emitting generic 'conversation_update' to sender");
+      emitTo(
+        io,
+        sender,
+        EnumSocketEvent.CONVERSATION_UPDATE,
+        convoUpdate
+      );
+
+      console.log("✅ Message processing complete\n");
+    });
+
+    const enrichedParticipants = await Promise.all(
+      conversation.participants.map(async (p) => {
+        const profile = await findProfile(p.id, p.role);
+        return {
+          id: p.id,
+          name: profile?.name || "Unknown",
+          email: profile?.email || null,
+          profilePic: profile?.profilePic || null,
+          role: p.role
+        };
+      })
+    );
+
+      // conversation updates
+      const convoUpdate = {
+        conversationId: conversation._id,
+        participants: enrichedParticipants,
         lastMessage: populatedMessage,
         updatedAt: conversation.updatedAt
       };
