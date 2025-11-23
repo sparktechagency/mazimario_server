@@ -3,9 +3,13 @@ const { status } = require("http-status");
 const ApiError = require("../../../error/ApiError");
 const User = require("./User");
 const Auth = require("../auth/Auth");
+const ServiceRequest = require("../serviceRequest/ServiceRequest");
+const Review = require("../review/Review");
 const unlinkFile = require("../../../util/unlinkFile");
 const validateFields = require("../../../util/validateFields");
 const QueryBuilder = require("../../../builder/queryBuilder");
+
+
 
 const updateProfile = async (req) => {
   const { files, body: data } = req;
@@ -83,18 +87,50 @@ const deleteMyAccount = async (payload) => {
 const getUser = async (query) => {
   validateFields(query, ["userId"]);
 
+  // Get user with populated auth and favorite categories
   const user = await User.findOne({ _id: query.userId })
-    .populate("authId")
+    .populate("authId", "-password -__v -createdAt -updatedAt")
+    .populate("favorites.categories.categoryId", "name icon isActive")
     .lean();
 
   if (!user) throw new ApiError(status.NOT_FOUND, "User not found");
 
-  return user;
+  // Get all service requests for this user
+  const serviceRequests = await ServiceRequest.find({ customerId: query.userId })
+    .populate("serviceCategory", "name icon")
+    .populate("assignedProvider", "name email phoneNumber profile_image")
+    .populate("potentialProviders.providerId", "name email phoneNumber profile_image")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Get all reviews by this user
+  const reviews = await Review.find({ user: query.userId })
+    .populate("providerId", "name email phoneNumber profile_image")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Return comprehensive user information
+  return {
+    ...user,
+    serviceRequests,
+    reviews,
+    stats: {
+      totalRequests: serviceRequests.length,
+      pendingRequests: serviceRequests.filter(r => r.status === "PENDING").length,
+      assignedRequests: serviceRequests.filter(r => r.status === "ASSIGNED").length,
+      processingRequests: serviceRequests.filter(r => r.status === "PROCESSING").length,
+      completedRequests: serviceRequests.filter(r => r.status === "COMPLETED").length,
+      totalReviews: reviews.length,
+      averageRating: reviews.length > 0 
+        ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(2)
+        : 0
+    }
+  };
 };
 
 const getAllUsers = async (userData, query) => {
   const userQuery = new QueryBuilder(
-    User.find({}).populate("authId").lean(),
+    User.find({}).populate("authId", "name email profile_image").select("profile_image name email phoneNumber").lean(),
     query
   )
     .search(["email", "name"])
