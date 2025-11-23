@@ -730,8 +730,8 @@ const getAllProviders = async (query) => {
   const providerQuery = new QueryBuilder(
     Provider.find({})
       .populate("serviceCategories", "name icon")
-      .populate("authId", "name email")
-      .populate("assignedProvider", "companyName email phoneNumber")
+      .populate("authId", "name email profile_image").select("profile_image")
+      // .populate("assignedProvider", "companyName email phoneNumber")
       .lean(),
     query
   )
