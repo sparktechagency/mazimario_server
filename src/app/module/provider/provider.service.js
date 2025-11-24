@@ -18,9 +18,9 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(deg2rad(lat1)) *
-      Math.cos(deg2rad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -579,8 +579,8 @@ const handleRequestResponse = async (userData, payload) => {
     postNotification(
       "Request " + payload.action.toLowerCase() + "ed",
       "Your request has been " +
-        payload.action.toLowerCase() +
-        "ed by the provider.",
+      payload.action.toLowerCase() +
+      "ed by the provider.",
       serviceRequest.customerId
     ),
 
@@ -588,13 +588,13 @@ const handleRequestResponse = async (userData, payload) => {
     postNotification(
       "You " + payload.action.toLowerCase() + "ed a new service request",
       "Service category : " +
-        serviceRequest.subcategory +
-        " , address: " +
-        serviceRequest.address +
-        " , customer contact: " +
-        serviceRequest.customerPhone +
-        ", priority level: " +
-        serviceRequest.priority,
+      serviceRequest.subcategory +
+      " , address: " +
+      serviceRequest.address +
+      " , customer contact: " +
+      serviceRequest.customerPhone +
+      ", priority level: " +
+      serviceRequest.priority,
       provider._id
     ),
 
@@ -602,9 +602,9 @@ const handleRequestResponse = async (userData, payload) => {
     postNotification(
       "A new service request found service provider",
       "A service provider accepted a new service request from a customer. Service address: " +
-        serviceRequest.address +
-        ", priority level: " +
-        serviceRequest.priority,
+      serviceRequest.address +
+      ", priority level: " +
+      serviceRequest.priority,
       serviceRequest.customerId
     ),
   ]);
@@ -730,7 +730,7 @@ const getAllProviders = async (query) => {
   const providerQuery = new QueryBuilder(
     Provider.find({})
       .populate("serviceCategories", "name icon")
-      .populate("authId", "name email profile_image").select("profile_image")
+      .populate("authId", "name email profile_image").select("isVerified")
       // .populate("assignedProvider", "companyName email phoneNumber")
       .lean(),
     query
@@ -753,7 +753,7 @@ const getAllProviders = async (query) => {
 const getProviderById = async (id) => {
   const provider = await Provider.findById(id)
     .populate("serviceCategories", "name icon")
-    .populate("authId", "name email");
+    .populate("authId", "name email profile_image isVerified");
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
