@@ -68,6 +68,7 @@ const AuthSchema = new Schema(
       type: String,
       sparse: true,
       trim: true,
+      default: null
     },
     isPhoneVerified: {
       type: Boolean,

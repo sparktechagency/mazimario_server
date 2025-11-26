@@ -730,8 +730,7 @@ const getAllProviders = async (query) => {
   const providerQuery = new QueryBuilder(
     Provider.find({})
       .populate("serviceCategories", "name icon")
-      .populate("authId", "name email profile_image").select("isVerified")
-      // .populate("assignedProvider", "companyName email phoneNumber")
+      .populate("authId", "name email profile_image isVerified phoneNumber website")
       .lean(),
     query
   )
@@ -753,7 +752,7 @@ const getAllProviders = async (query) => {
 const getProviderById = async (id) => {
   const provider = await Provider.findById(id)
     .populate("serviceCategories", "name icon")
-    .populate("authId", "name email profile_image isVerified");
+    .populate("authId", "name email profile_image isVerified phoneNumber website");
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
