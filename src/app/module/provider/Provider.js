@@ -129,5 +129,7 @@ const ProviderSchema = new Schema(
   }
 );
 
+ProviderSchema.index({ authId: 1 }, { unique: true });
+
 const Provider = model("Provider", ProviderSchema);
 module.exports = Provider;

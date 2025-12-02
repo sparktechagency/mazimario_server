@@ -17,9 +17,9 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(deg2rad(lat1)) *
-      Math.cos(deg2rad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -221,7 +221,7 @@ const createServiceRequest = async (req) => {
       `Your service request for ${selectedSubcategory.name} has been created successfully. Request ID: ${serviceRequest.requestId}`,
       user.userId
     ),
-  
+
     // Send notification to admin
     postNotification(
       "New Service Request Created",
@@ -231,7 +231,7 @@ const createServiceRequest = async (req) => {
 
   // STEP 1: Find matching providers
   const matchingProviders = await findMatchingProviders(serviceRequestData);
-  
+
   if (matchingProviders.length > 0) {
     // STEP 2: Add to ServiceRequest's potentialProviders (existing logic)
     serviceRequest.potentialProviders = matchingProviders.map((providerId) => ({
@@ -299,8 +299,8 @@ const getServiceRequests = async (userData, query) => {
     serviceRequestQuery.countTotal(),
   ]);
 
-  return { 
-    meta, 
+  return {
+    meta,
     requests,
     success: true,
     message: "Your service requests retrieved successfully"
@@ -322,7 +322,7 @@ const getServiceRequestById = async (query) => {
   }
 
   //find matching providers
-  const eligibleProviders = await findMatchingProviders({serviceCategory: serviceRequest?.serviceCategory?._id , latitude:serviceRequest?.latitude , longitude: serviceRequest?.longitude });
+  const eligibleProviders = await findMatchingProviders({ serviceCategory: serviceRequest?.serviceCategory?._id, latitude: serviceRequest?.latitude, longitude: serviceRequest?.longitude });
 
   // return eligibleProviders;
   console.log(eligibleProviders);
@@ -330,44 +330,44 @@ const getServiceRequestById = async (query) => {
   const providerIds = eligibleProviders.map(id => new mongoose.Types.ObjectId(id));
 
   const providersWithUserData = await Provider.aggregate([
-        {
-          $match: {
-            _id: { $in: providerIds },
-          },
-        },
-        {
-          $lookup: {
-            from: "auths", // name of the User collection in MongoDB
-            localField: "authId", // field in Provider collection
-            foreignField: "_id", // matching field in User collection
-            as: "providerDetails",
-          },
-        },
-        {
-          $unwind: {
-            path: "$providerDetails",
-            preserveNullAndEmptyArrays: true, // keep provider even if no user found
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            authId: 1,
-            serviceLocation: 1,
-            companyName: 1,
-            image: null,
-            "providerDetails.name": 1,
-            "providerDetails.email": 1,
-            // "providerDetails.profile_image": 1,
-            // "providerDetails.address": 1,
-          },
-        },
+    {
+      $match: {
+        _id: { $in: providerIds },
+      },
+    },
+    {
+      $lookup: {
+        from: "auths", // name of the User collection in MongoDB
+        localField: "authId", // field in Provider collection
+        foreignField: "_id", // matching field in User collection
+        as: "providerDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$providerDetails",
+        preserveNullAndEmptyArrays: true, // keep provider even if no user found
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        authId: 1,
+        serviceLocation: 1,
+        companyName: 1,
+        image: null,
+        "providerDetails.name": 1,
+        "providerDetails.email": 1,
+        // "providerDetails.profile_image": 1,
+        // "providerDetails.address": 1,
+      },
+    },
   ]);
 
   // console.log(providersWithUserData);
 
 
-  return {serviceRequest,providers: providersWithUserData};
+  return { serviceRequest, providers: providersWithUserData };
 };
 
 const getServiceRequestByIdDetails = async (userData, query) => {
@@ -435,7 +435,7 @@ const assignProviderToRequest = async (userData, payload) => {
 
 const getAllServiceRequests = async (query) => {
   const serviceRequestQuery = new QueryBuilder(
-    ServiceRequest.find(query)
+    ServiceRequest.find()
       .populate("serviceCategory", "name icon")
       .populate("assignedProvider", "companyName contactPerson phoneNumber")
       .populate("customerId", "name email phoneNumber address")
@@ -458,7 +458,7 @@ const getAllServiceRequests = async (query) => {
 const getAllProviderService = async (query) => {
   const { serviceCategory, latitude, longitude } = query;
 
-  validateFields(query,["serviceCategory","latitude","longitude"]);
+  validateFields(query, ["serviceCategory", "latitude", "longitude"]);
 
   // Find providers who have this serviceCategory in their serviceCategories array
   const matchingProviders = await Provider.find({
@@ -497,39 +497,39 @@ const getAllProviderService = async (query) => {
   const providerIds = eligibleProviders.map(id => new mongoose.Types.ObjectId(id));
 
   const providersWithUserData = await Provider.aggregate([
-        {
-          $match: {
-            _id: { $in: providerIds },
-          },
-        },
-        {
-          $lookup: {
-            from: "users", // name of the User collection in MongoDB
-            localField: "authId", // field in Provider collection
-            foreignField: "authId", // matching field in User collection
-            as: "userDetails",
-          },
-        },
-        {
-          $unwind: {
-            path: "$userDetails",
-            preserveNullAndEmptyArrays: true, // keep provider even if no user found
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            authId: 1,
-            "userDetails.name": 1,
-            "userDetails.email": 1,
-            "userDetails.profile_image": 1,
-            "userDetails.address": 1,
-          },
-        },
+    {
+      $match: {
+        _id: { $in: providerIds },
+      },
+    },
+    {
+      $lookup: {
+        from: "users", // name of the User collection in MongoDB
+        localField: "authId", // field in Provider collection
+        foreignField: "authId", // matching field in User collection
+        as: "userDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$userDetails",
+        preserveNullAndEmptyArrays: true, // keep provider even if no user found
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        authId: 1,
+        "userDetails.name": 1,
+        "userDetails.email": 1,
+        "userDetails.profile_image": 1,
+        "userDetails.address": 1,
+      },
+    },
   ]);
   console.log(providersWithUserData);
 
- return providersWithUserData;
+  return providersWithUserData;
 }
 
 

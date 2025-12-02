@@ -210,6 +210,7 @@ const getConversation = catchAsync(async (req, res) => {
 const getConversationList = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
+    console.log(req.user);
     const { page = 1, limit = 10, search = "" } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -251,10 +252,10 @@ const getConversationList = catchAsync(async (req, res) => {
       // identify other participant
       const other = conv.participants.find(p => p.id.toString() !== userId.toString());
       if (!other) return null;
-      
+
       // Get current user participant for this conversation
       const currentParticipant = conv.participants.find(p => p.id.toString() === userId.toString());
-      
+
       // apply search filter if needed
       const otherProfile = await findProfile(other.id, other.role);
       if (search && otherProfile && !otherProfile.name?.toLowerCase().includes(search.toLowerCase())) {
@@ -262,7 +263,7 @@ const getConversationList = catchAsync(async (req, res) => {
       }
 
       const lastMsgRaw = lastMessageMap[conv._id.toString()] || null;
-      
+
       // Populate last message sender and receiver profiles
       let lastMessage = null;
       if (lastMsgRaw) {
@@ -270,7 +271,7 @@ const getConversationList = catchAsync(async (req, res) => {
           findProfile(lastMsgRaw.sender?.id, lastMsgRaw.sender?.role),
           findProfile(lastMsgRaw.receiver?.id, lastMsgRaw.receiver?.role)
         ]);
-        
+
         lastMessage = {
           ...lastMsgRaw,
           sender: {
@@ -287,7 +288,7 @@ const getConversationList = catchAsync(async (req, res) => {
           }
         };
       }
-      
+
       const unreadCount = await Message.countDocuments({
         conversationId: conv._id,
         "receiver.id": new mongoose.Types.ObjectId(userId),

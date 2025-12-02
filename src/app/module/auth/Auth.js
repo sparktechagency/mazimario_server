@@ -13,10 +13,13 @@ const AuthSchema = new Schema(
     },
     email: {
       type: String,
-      required: [true, "Email is required"],
+      required: function () {
+        return this.provider !== "phone";
+      },
       unique: true,
+      sparse: true,
       validate: {
-        validator: (value) => validator.isEmail(value),
+        validator: (value) => !value || validator.isEmail(value),
         message: "Please provide a valid email address",
       },
     },
@@ -28,7 +31,7 @@ const AuthSchema = new Schema(
     },
     provider: {
       type: String,
-      enum: ["local", "google"],
+      enum: ["local", "google", "phone"],
       default: "local",
     },
 

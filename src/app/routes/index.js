@@ -6,13 +6,13 @@ const SuperAdminRoutes = require("../module/superAdmin/superAdmin.routes");
 const UserRoutes = require("../module/user/user.routes");
 const ServiceRequestRoutes = require("../module/serviceRequest/serviceRequest.routes");
 const CategoryRoutes = require("../module/category/category.routes");
-// const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes");
 // const DashboardRoutes = require("../module/dashboard/dashboard.routes");
 const ManageRoutes = require("../module/manage/manage.routes");
 const ProviderRoutes = require("../module/provider/provider.routes")
 const NotificationRoutes = require("../module/notification/notification.routes")
 const ReviewRoutes = require("../module/review/review.routes")
 const ChatRoutes = require("../module/chat/conversation.router")
+const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes")
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
 // const PostRoutes = require("../module/post/post.routes");
 // const SubscriptionPlanRoutes = require("../module/subscriptionPlan/subscriptionPlan.routes");
@@ -44,7 +44,7 @@ const moduleRoutes = [
     route: CategoryRoutes,
   },
   {
-    path: "/provider", 
+    path: "/provider",
     route: ProviderRoutes
   },
   {
@@ -59,10 +59,10 @@ const moduleRoutes = [
     path: "/chat",
     route: ChatRoutes
   },
-  // {
-  //   path: "/phone-verification",
-  //   route: PhoneVerificationRoutes,
-  // },
+  {
+    path: "/phone-verification",
+    route: PhoneVerificationRoutes,
+  },
   // {
   //   path: "/dashboard",
   //   route: DashboardRoutes,
