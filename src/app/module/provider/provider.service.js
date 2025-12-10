@@ -283,13 +283,25 @@ const updateProviderProfile = async (req) => {
   if (data.companyName) updateData.companyName = data.companyName;
   if (data.website) updateData.website = data.website;
   if (data.serviceLocation) updateData.serviceLocation = data.serviceLocation;
-  if (data.coveredRadius)
-    updateData.coveredRadius = parseFloat(data.coveredRadius);
+
+  // Validate coveredRadius before storing
+  if (data.coveredRadius) {
+    const coveredRadius = parseFloat(data.coveredRadius);
+    if (!isNaN(coveredRadius)) {
+      updateData.coveredRadius = coveredRadius;
+    }
+  }
+
   if (data.contactPerson) updateData.contactPerson = data.contactPerson;
 
+  // Validate latitude and longitude before storing
   if (data.latitude && data.longitude) {
-    updateData.latitude = parseFloat(data.latitude);
-    updateData.longitude = parseFloat(data.longitude);
+    const latitude = parseFloat(data.latitude);
+    const longitude = parseFloat(data.longitude);
+    if (!isNaN(latitude) && !isNaN(longitude)) {
+      updateData.latitude = latitude;
+      updateData.longitude = longitude;
+    }
   }
 
   if (data.workingHours) {
@@ -812,8 +824,19 @@ const approveProviderUpdate = async (payload) => {
     );
   }
 
-  // Apply the pending updates to the provider
-  Object.assign(provider, provider.pendingUpdates);
+  // Filter out any NaN values before applying updates
+  const sanitizedUpdates = {};
+  for (const [key, value] of Object.entries(provider.pendingUpdates)) {
+    // Skip NaN values for numeric fields
+    if (typeof value === 'number' && isNaN(value)) {
+      console.warn(`Skipping NaN value for field: ${key}`);
+      continue;
+    }
+    sanitizedUpdates[key] = value;
+  }
+
+  // Apply the sanitized pending updates to the provider
+  Object.assign(provider, sanitizedUpdates);
 
   // Clear pending updates
   provider.pendingUpdates = null;
