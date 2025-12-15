@@ -78,7 +78,7 @@ const ServiceRequestSchema = new Schema(
       },
       status: {
         type: String,
-        enum: ["PENDING", "ACCEPTED", "PROCESSING", "DECLINED", "PAID"],
+        enum: ["PENDING", "AWAITING_PAYMENT", "ACCEPTED", "DECLINED", "PAID"],
         default: "PENDING",
       },
       acceptedAt: Date,

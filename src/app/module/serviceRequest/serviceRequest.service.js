@@ -276,9 +276,58 @@ const getServiceRequests = async (userData, query) => {
   // Base filter - always filter by the logged-in user's ID
   const filter = { customerId: new mongoose.Types.ObjectId(userId) };
 
-  // Status filter (optional)
+  // Enhanced Status filter with multi-provider logic
   if (query.status) {
-    filter.status = query.status;
+    const userStatus = query.status.toUpperCase();
+
+    switch (userStatus) {
+      case 'PENDING':
+        // Request is still pending - no provider accepted yet
+        // Include requests with status PENDING that are NOT fully declined
+        filter.status = 'PENDING';
+        filter.$or = [
+          // No providers assigned yet
+          { potentialProviders: { $size: 0 } },
+          // Or at least one provider is still pending (not all declined)
+          { 'potentialProviders.status': { $in: ['PENDING', 'AWAITING_PAYMENT'] } }
+        ];
+        break;
+
+      case 'ONGOING':
+        // A provider accepted and is working on it
+        filter.status = { $in: ['ASSIGNED', 'PROCESSING'] };
+        break;
+
+      case 'COMPLETED':
+        // Service completed
+        filter.status = 'COMPLETED';
+        break;
+
+      case 'DECLINED':
+        // ALL providers declined this request
+        filter.status = 'PENDING';
+        // Must have at least one provider
+        filter['potentialProviders.0'] = { $exists: true };
+        // All providers must have declined
+        filter.$expr = {
+          $eq: [
+            { $size: '$potentialProviders' },
+            {
+              $size: {
+                $filter: {
+                  input: '$potentialProviders',
+                  cond: { $eq: ['$$this.status', 'DECLINED'] }
+                }
+              }
+            }
+          ]
+        };
+        break;
+
+      default:
+        // If unknown status, use it as-is (backward compatibility)
+        filter.status = query.status;
+    }
   }
 
   const serviceRequestQuery = new QueryBuilder(

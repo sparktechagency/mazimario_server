@@ -341,8 +341,9 @@ const getConversationList = catchAsync(async (req, res) => {
 const blockUser = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
+    console.log(userId);
     const { targetUserId } = req.params;
-    const { targetUserRole = "USER" } = req.body;
+    const { targetUserRole = "USER" } = req.body || {};
 
     if (userId === targetUserId) {
       return res.status(400).json({ success: false, message: "You cannot block yourself." });
@@ -379,6 +380,7 @@ const blockUser = catchAsync(async (req, res) => {
 const unblockUser = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
+    console.log(userId);
     const { targetUserId } = req.params;
 
     const conversation = await Conversation.findOne({
