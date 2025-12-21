@@ -207,7 +207,7 @@ const createServiceRequest = async (req) => {
   };
 
   if (files && files.attachments) {
-    serviceRequestData.attachments = files.attachments.map((file) => file.path);
+    serviceRequestData.attachments = files.attachments.map((file) => file.location);
   }
 
   const serviceRequest = await ServiceRequest.create(serviceRequestData);

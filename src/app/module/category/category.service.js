@@ -4,6 +4,7 @@ const QueryBuilder = require("../../../builder/queryBuilder");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
 const unlinkFile = require("../../../util/unlinkFile");
+const { deleteFromS3 } = require("../../../util/s3.util");
 const User = require("../user/User");
 const mongoose = require("mongoose");
 
@@ -24,7 +25,7 @@ const createCategory = async (req) => {
 
   const categoryData = {
     name: data.name,
-    icon: files.icon[0].path,
+    icon: files.icon[0].location,
     createdBy: user.authId,
   };
 
@@ -120,8 +121,11 @@ const updateCategory = async (req) => {
 
   // Handle icon update
   if (files && files.icon) {
-    if (category.icon) unlinkFile(category.icon);
-    updateData.icon = files.icon[0].path;
+    if (category.icon) {
+      if (category.icon.startsWith("http")) await deleteFromS3(category.icon);
+      else unlinkFile(category.icon);
+    }
+    updateData.icon = files.icon[0].location;
   }
 
   return await Category.findByIdAndUpdate(
@@ -153,7 +157,10 @@ const deleteCategory = async (payload) => {
   }
 
   // Delete the icon files
-  if (category.icon) unlinkFile(category.icon);
+  if (category.icon) {
+    if (category.icon.startsWith("http")) await deleteFromS3(category.icon);
+    else unlinkFile(category.icon);
+  }
 
   await Category.findByIdAndDelete(payload.categoryId);
   return { message: "Category deleted successfully" };

@@ -1,5 +1,6 @@
 const multer = require("multer");
-const fs = require("fs");
+const multerS3 = require("multer-s3");
+const { s3Client } = require("../../util/s3.util");
 
 const allowedMimeTypes = [
   // Image types
@@ -15,42 +16,44 @@ const allowedMimeTypes = [
   "video/flv",
   "video/webm",
   "video/mkv",
-  "video/3gp"
+  "video/3gp",
+  // PDF type
+  "application/pdf"
 ];
 
 const isValidFileType = (mimetype) => allowedMimeTypes.includes(mimetype);
 
-const createDirIfNotExists = (uploadPath) => {
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-};
-
 const uploadFile = () => {
-  const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      const uploadPath = `uploads/${file.fieldname}`;
-
-      createDirIfNotExists(uploadPath);
-
-      if (isValidFileType(file.mimetype)) {
-        cb(null, uploadPath);
-      } else {
-        cb(new Error("Invalid file type"));
-      }
+  const storage = multerS3({
+    s3: s3Client,
+    bucket: process.env.AWS_BUCKET_NAME,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
     },
-    filename: function (req, file, cb) {
-      const name = Date.now() + "-" + file.originalname;
-
-      // Store uploaded file paths in req.uploadedFiles for deletion in case of error or rollback needed
+    key: function (req, file, cb) {
+      // Create folder structure: fieldname/timestamp-originalname
+      const fileName = `${Date.now()}-${file.originalname}`;
+      const key = `${file.fieldname}/${fileName}`;
+      
+      // Store uploaded file URLs in req.uploadedFiles for tracking
       if (!req.uploadedFiles) req.uploadedFiles = [];
-      const filePath = `uploads/${file.fieldname}/${name}`;
-      req.uploadedFiles.push(filePath);
-
-      cb(null, name);
+      
+      // The S3 URL will be available in file.location after upload
+      cb(null, key);
     },
   });
 
   const fileFilter = (req, file, cb) => {
-    const allowedFieldNames = ["profile_image", "post_image", "attachments", "icon", "licenses", "certificates", "completionProof"];
+    const allowedFieldNames = [
+      "profile_image", 
+      "post_image", 
+      "attachments", 
+      "icon", 
+      "licenses", 
+      "certificates", 
+      "completionProof"
+    ];
 
     // Allow requests without files (when there's no fieldname)
     if (!file.fieldname) return cb(null, true);
@@ -85,22 +88,20 @@ const uploadFile = () => {
 
 // Separate upload function for chat files
 const uploadChatFiles = () => {
-  const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      const uploadPath = `uploads/${file.fieldname}`;
-      createDirIfNotExists(uploadPath);
-      if (isValidFileType(file.mimetype)) {
-        cb(null, uploadPath);
-      } else {
-        cb(new Error("Invalid file type"));
-      }
+  const storage = multerS3({
+    s3: s3Client,
+    bucket: process.env.AWS_BUCKET_NAME,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
     },
-    filename: function (req, file, cb) {
-      const name = Date.now() + "-" + file.originalname;
+    key: function (req, file, cb) {
+      const fileName = `${Date.now()}-${file.originalname}`;
+      const key = `${file.fieldname}/${fileName}`;
+      
       if (!req.uploadedFiles) req.uploadedFiles = [];
-      const filePath = `uploads/${file.fieldname}/${name}`;
-      req.uploadedFiles.push(filePath);
-      cb(null, name);
+      
+      cb(null, key);
     },
   });
 

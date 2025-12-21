@@ -3,6 +3,7 @@ const ApiError = require("../../../error/ApiError");
 const Auth = require("../auth/Auth");
 const SuperAdmin = require("./SuperAdmin");
 const unlinkFile = require("../../../util/unlinkFile");
+const { deleteFromS3 } = require("../../../util/s3.util");
 const validateFields = require("../../../util/validateFields");
 const { EnumUserRole } = require("../../../util/enum");
 const EmailHelpers = require("../../../util/emailHelpers");
@@ -18,8 +19,11 @@ const updateProfile = async (req) => {
   const existingUser = await SuperAdmin.findById(userId).lean();
 
   if (files && files.profile_image) {
-    updatedData.profile_image = files.profile_image[0].path;
-    if (existingUser.profile_image) unlinkFile(existingUser.profile_image);
+    updatedData.profile_image = files.profile_image[0].location;
+    if (existingUser.profile_image) {
+      if (existingUser.profile_image.startsWith("http")) await deleteFromS3(existingUser.profile_image);
+      else unlinkFile(existingUser.profile_image);
+    }
   }
 
   const [auth, admin] = await Promise.all([
@@ -112,7 +116,7 @@ const createSuperAdmin = async (req) => {
     name: payload.name,
     email: payload.email,
     phoneNumber: payload.phoneNumber,
-    ...(files?.profile_image && { profile_image: files.profile_image[0].path }),
+    ...(files?.profile_image && { profile_image: files.profile_image[0].location }),
   };
 
   const superAdmin = await SuperAdmin.create(superAdminData);

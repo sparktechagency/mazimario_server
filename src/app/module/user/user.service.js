@@ -6,6 +6,7 @@ const Auth = require("../auth/Auth");
 const ServiceRequest = require("../serviceRequest/ServiceRequest");
 const Review = require("../review/Review");
 const unlinkFile = require("../../../util/unlinkFile");
+const { deleteFromS3 } = require("../../../util/s3.util");
 const validateFields = require("../../../util/validateFields");
 const QueryBuilder = require("../../../builder/queryBuilder");
 
@@ -22,8 +23,15 @@ const updateProfile = async (req) => {
   const existingUser = await User.findById(userId).lean();
 
   if (files && files.profile_image) {
-    updateData.profile_image = files.profile_image[0].path;
-    if (existingUser.profile_image) unlinkFile(existingUser.profile_image);
+    updateData.profile_image = files.profile_image[0].location;
+    // Check if it's a local file or S3 URL
+    if (existingUser.profile_image) {
+      if (existingUser.profile_image.startsWith('http')) {
+        await deleteFromS3(existingUser.profile_image);
+      } else {
+        unlinkFile(existingUser.profile_image);
+      }
+    }
   }
 
   const [auth, user] = await Promise.all([

@@ -199,7 +199,7 @@ const registerProvider = async (req) => {
 
   // Handle file uploads
   if (files && files.attachments) {
-    providerData.attachments = files.attachments.map((file) => file.path);
+    providerData.attachments = files.attachments.map((file) => file.location);
   }
 
   const provider = await Provider.create(providerData);
@@ -311,9 +311,9 @@ const updateProviderProfile = async (req) => {
   // Handle file uploads
   if (files && files.profile_image) {
     // Only ONE profile image allowed
-    updateData.profile_image = files.profile_image[0].path;
+    updateData.profile_image = files.profile_image[0].location;
   } else if (files && files.attachments) {
-    updateData.attachments = files.attachments.map((file) => file.path);
+    updateData.attachments = files.attachments.map((file) => file.location);
   } else {
     updateData.profile_image = existingProvider.profile_image;
     updateData.attachments = existingProvider.attachments;
@@ -667,7 +667,7 @@ const markRequestComplete = async (req) => {
   // Handle completion proof uploads
   if (files && files.completionProof) {
     serviceRequest.completionProof = files.completionProof.map(
-      (file) => file.path
+      (file) => file.location
     );
   }
 

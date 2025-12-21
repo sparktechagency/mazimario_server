@@ -7,6 +7,7 @@ const { EnumUserRole } = require("../../../util/enum");
 const Auth = require("../auth/Auth");
 const EmailHelpers = require("../../../util/emailHelpers");
 const unlinkFile = require("../../../util/unlinkFile");
+const { deleteFromS3 } = require("../../../util/s3.util");
 
 const postAdmin = async (req) => {
   const { body: payload, files } = req;
@@ -46,7 +47,7 @@ const postAdmin = async (req) => {
     password: payload.password,
     role: EnumUserRole.ADMIN,
     phoneNumber: payload.phoneNumber,
-    profile_image: files.profile_image[0].path,
+    profile_image: files.profile_image[0].location,
   };
 
   const admin = await Admin.create(adminData);
@@ -103,12 +104,15 @@ const updateAdmin = async (req) => {
   if (!admin) throw new ApiError(status.NOT_FOUND, "Admin not found");
 
   if (files.profile_image)
-    if (admin.profile_image) unlinkFile(admin.profile_image);
+    if (admin.profile_image) {
+      if (admin.profile_image.startsWith("http")) await deleteFromS3(admin.profile_image);
+      else unlinkFile(admin.profile_image);
+    }
 
   const updatedAData = {
     ...(payload.name && { name: payload.name }),
     ...(payload.phoneNumber && { phoneNumber: payload.phoneNumber }),
-    ...(files.profile_image && { profile_image: files.profile_image[0].path }),
+    ...(files.profile_image && { profile_image: files.profile_image[0].location }),
   };
 
   const [updatedAdmin] = await Promise.all([
@@ -190,12 +194,15 @@ const updateProfileImageAdmin = async (req) => {
 
   if (!result || !auth) throw new ApiError(status.NOT_FOUND, "Admin not found");
 
-  if (result.profile_image) unlinkFile(result.profile_image);
+  if (result.profile_image) {
+    if (result.profile_image.startsWith("http")) await deleteFromS3(result.profile_image);
+    else unlinkFile(result.profile_image);
+  }
 
   const updatedAdmin = await Admin.findByIdAndUpdate(
     userId,
     {
-      profile_image: files.profile_image[0].path,
+      profile_image: files.profile_image[0].location,
     },
     {
       new: true,
