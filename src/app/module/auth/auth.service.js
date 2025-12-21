@@ -60,7 +60,7 @@ const registrationAccount = async (payload) => {
   if (user) {
     const message = user.isActive
       ? "Account active. Please Login"
-      : "Already have an account. Please activate";
+      : "invalid! please try again with another email";
 
     if (!user.isActive) {
       user.activationCode = activationCode;
