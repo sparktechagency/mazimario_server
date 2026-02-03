@@ -38,11 +38,16 @@ const CategorySchema = new Schema(
     },
     icon: {
       type: String, // New field for category icon
-    //   required: true,
+      //   required: true,
     },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    price: {
+      type: Number,
+      default: 0,
+      required: true
     },
     subcategories: [SubcategorySchema], // Embedded subcategories
     createdBy: {

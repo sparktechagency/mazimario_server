@@ -1,4 +1,5 @@
 const { default: status } = require("http-status");
+const { createLeadCheckoutSession } = require("../lead/lead.service");
 const Provider = require("./Provider");
 const Auth = require("../auth/Auth");
 const User = require("../user/User");
@@ -133,7 +134,7 @@ const registerProvider = async (req) => {
 
   validateFields(data, [
     "companyName",
-    "serviceCategories", // Changed from serviceCategory to serviceCategories
+    "serviceCategories",
     "serviceLocation",
     "contactPerson",
     "coveredRadius",
@@ -143,21 +144,7 @@ const registerProvider = async (req) => {
   ]);
 
   // Check if provider already exists with this auth ID
-  const existingProvider = await Provider.findOne({ authId: user.authId });
-
-  // Check if company name is already taken by another active provider
-  const existingCompany = await Provider.findOne({
-    companyName: data.companyName,
-    isActive: true,
-    _id: { $ne: existingProvider?._id },
-  });
-
-  if (existingCompany) {
-    throw new ApiError(
-      status.CONFLICT,
-      "This company name is already registered. Please choose a different company name."
-    );
-  }
+  const existingProvider = await Provider.findOne({ authId: user.authId }).sort({ createdAt: -1 });
 
   // Parse and validate service categories (array of category IDs)
   const serviceCategories = JSON.parse(data.serviceCategories || "[]");
@@ -184,11 +171,25 @@ const registerProvider = async (req) => {
     }
   }
 
+  // Check if company name is already taken by ANOTHER provider
+  const existingCompany = await Provider.findOne({
+    companyName: data.companyName,
+    isActive: true,
+    _id: { $ne: existingProvider?._id },
+  });
+
+  if (existingCompany) {
+    throw new ApiError(
+      status.CONFLICT,
+      "This company name is already registered. Please choose a different company name."
+    );
+  }
+
   const providerData = {
     authId: user.authId,
     companyName: data.companyName,
     website: data.website,
-    serviceCategories: serviceCategories, // Array of category IDs
+    serviceCategories: serviceCategories,
     latitude: parseFloat(data.latitude),
     longitude: parseFloat(data.longitude),
     coveredRadius: parseFloat(data.coveredRadius),
@@ -202,16 +203,34 @@ const registerProvider = async (req) => {
     providerData.attachments = files.attachments.map((file) => file.location);
   }
 
-  const provider = await Provider.create(providerData);
+  let provider;
 
-  // Notify admin about new provider registration
-  await postNotification(
-    "New Provider Registered",
-    `A new provider has been registered: ${provider.companyName}. Please verify them.`
-  );
+  // If provider exists, UPDATE it instead of creating new one
+  if (existingProvider) {
+    console.log(`Updating existing provider for authId: ${user.authId}`);
+    provider = await Provider.findByIdAndUpdate(
+      existingProvider._id,
+      { $set: providerData },
+      { new: true, runValidators: true }
+    );
+
+    await postNotification(
+      "Provider Profile Updated",
+      `Your provider profile has been updated: ${provider.companyName}.`
+    );
+  } else {
+    // Create new provider
+    console.log(`Creating new provider for authId: ${user.authId}`);
+    provider = await Provider.create(providerData);
+
+    // Notify admin about new provider registration
+    await postNotification(
+      "New Provider Registered",
+      `A new provider has been registered: ${provider.companyName}. Please verify them.`
+    );
+  }
 
   // IMPORTANT: Match new provider with existing PENDING service requests
-  // Only if provider is verified (admin can verify later, so this runs after verification too)
   if (provider.isVerified && provider.isActive) {
     await matchProviderWithPendingRequests(provider);
   }
@@ -224,11 +243,10 @@ const getProviderProfile = async (userData) => {
   // Find the LATEST provider by authId (sort by createdAt desc)
   const provider = await Provider.findOne({ authId: userData.authId })
     .sort({ createdAt: -1 }) // Get the most recent one
-    .populate("serviceCategories", "name icon")
+    .populate("serviceCategories", "name icon price") // Always populate serviceCategories
     .populate("authId", "name email")
     .lean();
 
-  // console.log("Found provider:", provider);
 
   if (!provider) {
     throw new ApiError(status.NOT_FOUND, "Provider not found");
@@ -283,6 +301,35 @@ const updateProviderProfile = async (req) => {
   if (data.companyName) updateData.companyName = data.companyName;
   if (data.website) updateData.website = data.website;
   if (data.serviceLocation) updateData.serviceLocation = data.serviceLocation;
+
+  // Handle serviceCategories update - CRITICAL FIX
+  if (data.serviceCategories) {
+    const serviceCategories = JSON.parse(data.serviceCategories || "[]");
+
+    if (!Array.isArray(serviceCategories) || serviceCategories.length === 0) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "At least one service category is required"
+      );
+    }
+
+    // Validate all categories exist and are active
+    for (const categoryId of serviceCategories) {
+      const category = await Category.findOne({
+        _id: categoryId,
+        isActive: true,
+      });
+
+      if (!category) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          `Invalid or inactive category: ${categoryId}`
+        );
+      }
+    }
+
+    updateData.serviceCategories = serviceCategories;
+  }
 
   // Validate coveredRadius before storing
   if (data.coveredRadius) {
@@ -396,17 +443,23 @@ const getPotentialRequests = async (userData, query) => {
   }
 
   // Extract potentialProvider status filter from query (default to PENDING)
+  // Extract potentialProvider status filter from query (default to PENDING)
   const providerStatus = query.providerStatus || "PENDING";
 
-  // Remove providerStatus from query to avoid QueryBuilder confusion
-  const { providerStatus: _, status: __, ...cleanQuery } = query;
+  // Remove filtered fields from query to avoid QueryBuilder confusion
+  const { providerStatus: _, status: queryStatus, ...cleanQuery } = query;
+
+  // Determine status filter for elemMatch
+  // If user passed a providerStatus, use it. Otherwise default to PENDING.
+  // We need to handle the case where "COMPLETED" or other statuses are requested.
+  const filterStatus = providerStatus;
 
   // Base query: match this provider inside potentialProviders array
   const baseQuery = ServiceRequest.find({
     potentialProviders: {
       $elemMatch: {
         providerId: provider._id,
-        status: providerStatus, // Filter by potentialProviders status only
+        status: filterStatus,
       },
     },
   })
@@ -424,6 +477,46 @@ const getPotentialRequests = async (userData, query) => {
   const requests = await queryBuilder.modelQuery;
   const meta = await queryBuilder.countTotal();
 
+  // Sanitize requests based on purchase status
+  const sanitizedRequests = requests.map(req => {
+    // Check if this provider has purchased the lead
+    const hasPurchased = req.purchasedBy?.some(
+      p => p.provider && p.provider.toString() === provider._id.toString()
+    );
+
+    if (hasPurchased) {
+      // If purchased, they see real status and details
+      // BUT they should only see their OWN offer, not competitors'
+      if (req.offers) {
+        req.offers = req.offers.filter(
+          o => o.provider && o.provider.toString() === provider._id.toString()
+        );
+      }
+      return req;
+    }
+
+    // IF NOT PURCHASED:
+    // 1. Mask status as PENDING (so they don't know others purchased)
+    req.status = "PENDING";
+
+    // 2. Hide all offers
+    req.offers = [];
+
+    // 3. Mask detailed customer info (keep only basic for list view)
+    if (req.customerId) {
+      req.customerId.name = "Customer";
+      req.customerId.email = "Purchase to view";
+      req.customerId.phoneNumber = "Purchase to view";
+    }
+    req.customerPhone = "Purchase to view";
+
+    // 4. Hide sensitive arrays
+    delete req.purchasedBy;
+    delete req.potentialProviders;
+
+    return req;
+  });
+
   return {
     meta: {
       page: meta.page,
@@ -431,7 +524,7 @@ const getPotentialRequests = async (userData, query) => {
       total: meta.total,
       totalPages: meta.totalPage,
     },
-    requests,
+    requests: sanitizedRequests,
   };
 };
 
@@ -446,20 +539,48 @@ const getPotentialRequestById = async (userData, query) => {
     throw new ApiError(status.NOT_FOUND, "Provider not found or inactive");
   }
 
-  const requests = await ServiceRequest.findById(query.requestId)
+  const request = await ServiceRequest.findById(query.requestId)
     .populate("customerId", "name email phoneNumber")
     .populate("serviceCategory", "name icon")
     .lean();
 
-  return {
-    meta: {
-      page: 1,
-      limit: requests.length,
-      total: requests.length,
-      totalPages: 1,
-    },
-    requests: requests,
-  };
+  if (!request) {
+    throw new ApiError(status.NOT_FOUND, "Request not found");
+  }
+
+  // Check if this provider has purchased the lead
+  const hasPurchased = request.purchasedBy?.some(
+    p => p.provider && p.provider.toString() === provider._id.toString()
+  );
+
+  if (hasPurchased) {
+    // If purchased, filter offers to show ONLY their own
+    if (request.offers) {
+      request.offers = request.offers.filter(
+        o => o.provider && o.provider.toString() === provider._id.toString()
+      );
+    }
+  } else {
+    // IF NOT PURCHASED:
+    // 1. Mask status
+    request.status = "PENDING";
+
+    // 2. Hide offers
+    request.offers = [];
+
+    // 3. Mask customer details
+    if (request.customerId) {
+      request.customerId.name = "Customer";
+      request.customerId.email = "Purchase to view";
+      request.customerId.phoneNumber = "Purchase to view";
+    }
+    request.customerPhone = "Purchase to view";
+
+    // 4. Hide sensitive arrays
+    delete request.purchasedBy;
+  }
+
+  return request;
 };
 
 // Handle Request Response (Accept/Decline)
@@ -495,6 +616,18 @@ const getPotentialRequestById = async (userData, query) => {
 // };
 
 const handleRequestResponse = async (userData, payload) => {
+  // Allow action OR status (for compatibility)
+  if (!payload.action && payload.status) {
+    // Map status 'ACCEPTED' -> 'ACCEPT', 'DECLINED' -> 'DECLINE'
+    const statusMap = {
+      'ACCEPTED': 'ACCEPT',
+      'DECLINED': 'DECLINE',
+      'ACCEPT': 'ACCEPT',
+      'DECLINE': 'DECLINE'
+    };
+    payload.action = statusMap[payload.status.toUpperCase()] || payload.status;
+  }
+
   validateFields(payload, ["requestId", "action"]);
 
   // Find the LATEST provider by authId
@@ -537,27 +670,51 @@ const handleRequestResponse = async (userData, payload) => {
     }
 
     // Check if provider has already paid or needs to pay
-    if (serviceRequest.leadFee > 0) {
+    // Use leadPrice (default 500) if not specified
+    const price = serviceRequest.leadPrice || 500;
+
+    // Check if the provider has already purchased this lead
+    const hasPurchased = serviceRequest.purchasedBy?.some(
+      (p) => p.provider && p.provider.toString() === provider._id.toString()
+    );
+
+    if (price > 0 && !hasPurchased) {
       // Start a 5-minute payment hold window
       const fiveMinutesMs = 5 * 60 * 1000;
       serviceRequest.potentialProviders[potentialProviderIndex].status =
-        "PAYMENT_PENDING";
+        "AWAITING_PAYMENT"; // Changed from PAYMENT_PENDING
       serviceRequest.potentialProviders[
         potentialProviderIndex
       ].paymentWindowStartedAt = now;
-      serviceRequest.status = "ON_PROCESS"; // visible to others as "on process"
+
+      // Keep main status as PENDING (or appropriate valid status) while payment is processed
+      // serviceRequest.status = "PENDING"; 
+
       serviceRequest.paymentHoldBy = provider._id;
       serviceRequest.paymentHoldUntil = new Date(now.getTime() + fiveMinutesMs);
 
-      // Do NOT assign yet; assignment will happen after payment confirmation
+      // Save before creating session to ensure state is clean
+      await serviceRequest.save();
+
+      // Create Stripe Checkout Session
+      const checkoutSession = await createLeadCheckoutSession(provider.authId.toString(), serviceRequest.requestId);
+
+      return {
+        message: "Request accepted. Payment required.",
+        requiresPayment: true,
+        leadFee: price / 100, // Convert cents to dollars
+        paymentUrl: checkoutSession.url,
+        sessionId: checkoutSession.sessionId
+      };
+
     } else {
-      // No lead fee, directly assign to provider
+      // No lead fee or ALREADY purchased, directly assign to provider
       serviceRequest.potentialProviders[potentialProviderIndex].status =
         "ACCEPTED";
       serviceRequest.potentialProviders[potentialProviderIndex].acceptedAt =
         now;
       serviceRequest.assignedProvider = provider._id;
-      serviceRequest.status = "PROCESSING";
+      serviceRequest.status = "IN_PROGRESS"; // Changed from ASSIGNED to IN_PROGRESS (ON GOING)
       // Clear any residual hold data
       serviceRequest.paymentHoldBy = undefined;
       serviceRequest.paymentHoldUntil = undefined;
@@ -645,7 +802,7 @@ const markRequestComplete = async (req) => {
   const serviceRequest = await ServiceRequest.findOne({
     _id: data.requestId,
     assignedProvider: provider._id,
-    status: "PROCESSING",
+    status: { $in: ["ASSIGNED", "IN_PROGRESS", "PURCHASED"] }, // Allow valid statuses
   });
 
   // console.log(
@@ -725,10 +882,12 @@ const confirmLeadPayment = async (userData, payload) => {
     );
   }
 
-  serviceRequest.potentialProviders[idx].status = "PAID";
+  // Align status with simplified flow (ACCEPTED / IN_PROGRESS)
+  serviceRequest.potentialProviders[idx].status = "ACCEPTED";
   serviceRequest.potentialProviders[idx].paidAt = new Date();
+  serviceRequest.potentialProviders[idx].acceptedAt = new Date();
   serviceRequest.assignedProvider = provider._id;
-  serviceRequest.status = "PROCESSING";
+  serviceRequest.status = "IN_PROGRESS";
   serviceRequest.paymentHoldBy = undefined;
   serviceRequest.paymentHoldUntil = undefined;
 

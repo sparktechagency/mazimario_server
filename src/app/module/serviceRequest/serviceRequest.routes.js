@@ -28,6 +28,23 @@ router
     "/details",
     auth(config.auth_level.user),
     ServiceRequestController.getServiceRequestByIdDetails
+  )
+  // NEW: Customer views all provider offers
+  .get(
+    "/view-offers",
+    auth(config.auth_level.user),
+    ServiceRequestController.viewOffers
+  )
+  // NEW: Customer accepts a provider's offer
+  .post(
+    "/accept-offer",
+    auth(config.auth_level.user),
+    ServiceRequestController.acceptOffer
+  )
+  .patch(
+    "/update-status",
+    auth(config.auth_level.user),
+    ServiceRequestController.updateServiceRequestStatus
   );
 
 // Provider routes
@@ -42,10 +59,28 @@ router
     auth(config.auth_level.provider),
     ServiceRequestController.getServiceRequestByIdDetails
   )
+  // DEPRECATED: Use update-status endpoint instead
+  // .patch(
+  //   "/update-status",
+  //   auth(config.auth_level.provider),
+  //   ServiceRequestController.updateServiceRequestStatus
+  // )
+  // NEW: Provider submits offer/proposal
+  .post(
+    "/submit-offer",
+    auth(config.auth_level.provider),
+    ServiceRequestController.submitOffer
+  )
   .patch(
     "/update-status",
     auth(config.auth_level.provider),
     ServiceRequestController.updateServiceRequestStatus
+  )
+  .post(
+    "/complete",
+    auth(config.auth_level.provider),
+    uploadFile([{ name: "completionProof", maxCount: 5 }]),
+    ServiceRequestController.completeServiceRequest
   );
 
 // Admin routes
@@ -59,15 +94,12 @@ router
     "/get-by-id",
     auth(config.auth_level.admin),
     ServiceRequestController.getServiceRequestById
-  )
-  // .get(
-  //   "/get-all-provider",
-  //   ServiceRequestController.getAllProvider
-  // )
-  .patch(
-    "/assign-provider",
-    auth(config.auth_level.admin),
-    ServiceRequestController.assignProviderToRequest
   );
+// COMMENTED OUT: Customers now accept offers directly, no need for admin to assign
+// .patch(
+//   "/assign-provider",
+//   auth(config.auth_level.admin),
+//   ServiceRequestController.assignProviderToRequest
+// );
 
 module.exports = router;

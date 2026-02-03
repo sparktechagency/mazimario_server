@@ -23,7 +23,7 @@ const getServiceRequests = catchAsync(async (req, res) => {
 });
 
 const getServiceRequestById = catchAsync(async (req, res) => {
-  const result = await ServiceRequestService.getServiceRequestById(req.query);
+  const result = await ServiceRequestService.getServiceRequestById(req.user, req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -82,6 +82,48 @@ const getAllServiceRequests = catchAsync(async (req, res) => {
   });
 });
 
+const completeServiceRequest = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.completeServiceRequest(req.user, req.body, req.files);
+  console.log(req.user, "hello");
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Service request completed successfully",
+    data: result,
+  });
+});
+
+// ==================== OFFER SYSTEM CONTROLLERS ====================
+const submitOffer = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.submitOffer(req.user, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Offer submitted successfully",
+    data: result,
+  });
+});
+
+const viewOffers = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.viewOffers(req.user, req.query);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Offers retrieved successfully",
+    data: result,
+  });
+});
+
+const acceptOffer = catchAsync(async (req, res) => {
+  const result = await ServiceRequestService.acceptOffer(req.user, req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Offer accepted successfully. Provider has been assigned.",
+    data: result,
+  });
+});
+
 const ServiceRequestController = {
   createServiceRequest,
   getServiceRequests,
@@ -91,6 +133,11 @@ const ServiceRequestController = {
   assignProviderToRequest,
   getAllProvider,
   getAllServiceRequests,
+  completeServiceRequest,
+  // New offer system controllers
+  submitOffer,
+  viewOffers,
+  acceptOffer
 };
 
 module.exports = { ServiceRequestController };

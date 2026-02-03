@@ -47,7 +47,7 @@ const sendSMSViaSSL = async (phoneNumber, message) => {
 
     return response.data;
   } catch (error) {
-    console.error('SSL Wireless error:', error.response?.data || error.message);
+    // console.error('SSL Wireless error:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -166,12 +166,12 @@ const sendSMSWithFallback = async (phoneNumber, message) => {
 
   for (const provider of providers) {
     try {
-      console.log(`Trying ${provider.name}...`);
+      // console.log(`Trying ${provider.name}...`);
       await provider.fn(phoneNumber, message);
-      console.log(`✅ SMS sent via ${provider.name}`);
+      // console.log(`✅ SMS sent via ${provider.name}`);
       return;
     } catch (error) {
-      console.error(`❌ ${provider.name} failed:`, error.message);
+      // console.error(`❌ ${provider.name} failed:`, error.message);
       continue;
     }
   }
@@ -246,14 +246,14 @@ const sendSMS = async (phoneNumber, message) => {
   
   try {
     if (isBangladesh) {
-      console.log('📱 Sending SMS via SSL Wireless (Bangladesh)');
+      // console.log('📱 Sending SMS via SSL Wireless (Bangladesh)');
       return await sendSMSViaSSL(phoneNumber, message);
     } else {
-      console.log('📱 Sending SMS via Twilio (International)');
+      // console.log('📱 Sending SMS via Twilio (International)');
       return await sendSMSViaTwilio(phoneNumber, message);
     }
   } catch (error) {
-    console.error('❌ SMS sending failed:', error.message);
+    // console.error('❌ SMS sending failed:', error.message);
     throw error;
   }
 };
@@ -273,9 +273,9 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 
 if (isDevelopment && phoneNumber.startsWith('+880')) {
   // Skip actual SMS sending in dev mode for Bangladesh
-  console.log('🧪 DEV MODE: Skipping SMS');
-  console.log('📱 Phone:', phoneNumber);
-  console.log('🔢 Code:', verificationCode);
+  // console.log('🧪 DEV MODE: Skipping SMS');
+  // console.log('📱 Phone:', phoneNumber);
+  // console.log('🔢 Code:', verificationCode);
   // Save code to database but don't send SMS
 } else {
   // Send actual SMS

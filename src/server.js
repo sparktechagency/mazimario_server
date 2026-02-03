@@ -9,6 +9,10 @@ async function main() {
     logger.info(`DB Connected Successfully at ${new Date().toLocaleString()}`);
     // console.log("JWT_SECRET:", config.jwt.secret);
 
+    // Initialize cron jobs
+    const initCronJobs = require("./app/module/cron/cron.service");
+    initCronJobs();
+
     // mainServer.listen(Number(config.port), config.base_url, () => {
     mainServer.listen(Number(config.port), () => {
       logger.info(`App listening on http://${config.base_url}:${config.port}`);
