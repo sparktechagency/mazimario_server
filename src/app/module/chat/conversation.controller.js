@@ -89,7 +89,7 @@ async function findProfile(id, role) {
       }
     }
   } catch (e) {
-    console.error("findProfile error:", e);
+    // console.error("findProfile error:", e);
     return null;
   }
 }
@@ -201,7 +201,7 @@ const getConversation = catchAsync(async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("getConversation error:", error);
+    // console.error("getConversation error:", error);
     res.status(500).json({ status: false, message: "Server error" });
   }
 });
@@ -210,7 +210,7 @@ const getConversation = catchAsync(async (req, res) => {
 const getConversationList = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log(req.user);
+    // console.log(req.user);
     const { page = 1, limit = 10, search = "" } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -341,7 +341,7 @@ const getConversationList = catchAsync(async (req, res) => {
 const blockUser = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log(userId);
+    // console.log(userId);
     const { targetUserId } = req.params;
     const { targetUserRole = "USER" } = req.body || {};
 
@@ -372,7 +372,7 @@ const blockUser = catchAsync(async (req, res) => {
 
     res.status(200).json({ success: true, message: "User blocked successfully.", blocked: true });
   } catch (error) {
-    console.error("blockUser error:", error);
+    //console.error("blockUser error:", error);
     res.status(500).json({ success: false, message: "Server error while blocking user." });
   }
 });
@@ -380,7 +380,7 @@ const blockUser = catchAsync(async (req, res) => {
 const unblockUser = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log(userId);
+    //console.log(userId);
     const { targetUserId } = req.params;
 
     const conversation = await Conversation.findOne({
@@ -401,7 +401,7 @@ const unblockUser = catchAsync(async (req, res) => {
 
     res.status(200).json({ success: true, message: "User unblocked successfully.", blocked: false });
   } catch (error) {
-    console.error("unblockUser error:", error);
+    //console.error("unblockUser error:", error);
     res.status(500).json({ success: false, message: "Server error while unblocking user." });
   }
 });
@@ -452,7 +452,7 @@ const checkUserIsBlocked = catchAsync(async (req, res) => {
       message
     });
   } catch (error) {
-    console.error("checkUserIsBlocked error:", error);
+    //console.error("checkUserIsBlocked error:", error);
     res.status(500).json({ success: false, message: "Server error while checking block status." });
   }
 });
@@ -479,7 +479,7 @@ const blockToggle = catchAsync(async (req, res) => {
       return res.status(200).json({ success: true, message: "Conversation blocked successfully.", blocked: true, conversationId: conversation._id });
     }
   } catch (error) {
-    console.error("blockToggle error:", error);
+    //console.error("blockToggle error:", error);
     res.status(500).json({ success: false, message: "Server error please try again!" });
   }
 });
@@ -505,7 +505,7 @@ const chatImageVideo = catchAsync(async (req, res) => {
       cover: uploadedVideoCover,
     });
   } catch (error) {
-    console.error("chatImageVideo error:", error);
+    //console.error("chatImageVideo error:", error);
     res.status(500).json({ success: false, message: "File Upload Error" });
   }
 });
@@ -530,7 +530,7 @@ const deleteMessage = catchAsync(async (req, res) => {
 
     return res.status(200).json({ success: true, message: "Message deleted successfully" });
   } catch (error) {
-    console.error("deleteMessage error:", error);
+    //console.error("deleteMessage error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -629,7 +629,7 @@ const getConversationById = catchAsync(async (req, res) => {
     });
 
   } catch (error) {
-    console.error("getConversationById error:", error);
+    //console.error("getConversationById error:", error);
     res.status(500).json({
       success: false,
       message: "Server error"

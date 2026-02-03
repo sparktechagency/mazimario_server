@@ -11,13 +11,13 @@ const mongoose = require("mongoose");
 // Create Category
 const createCategory = async (req) => {
   const { files, body: data, user } = req;
-  
-  validateFields(data, ["name"]);
-  validateFields(files, ["icon"]); 
+
+  validateFields(data, ["name", "price"]);
+  validateFields(files, ["icon"]);
 
   // Check if category already exists
-  const existingCategory = await Category.findOne({ 
-    name: { $regex: new RegExp(`^${data.name}$`, 'i') } 
+  const existingCategory = await Category.findOne({
+    name: { $regex: new RegExp(`^${data.name}$`, 'i') }
   });
   if (existingCategory) {
     throw new ApiError(status.BAD_REQUEST, "Category already exists");
@@ -25,6 +25,7 @@ const createCategory = async (req) => {
 
   const categoryData = {
     name: data.name,
+    price: data.price,
     icon: files.icon[0].location,
     createdBy: user.authId,
   };
@@ -56,6 +57,7 @@ const getAllCategories = async (query) => {
   const categoriesWithCount = categories.map(category => ({
     _id: category._id,
     name: category.name,
+    price: category.price,
     image: category.image,
     icon: category.icon,
     isActive: category.isActive,
@@ -83,6 +85,7 @@ const getCategoryById = async (query) => {
   return {
     _id: category._id,
     name: category.name,
+    price: category.price,
     image: category.image,
     icon: category.icon,
     isActive: category.isActive,
@@ -116,6 +119,7 @@ const updateCategory = async (req) => {
 
   const updateData = {
     ...(data.name && { name: data.name }),
+    ...(data.price && { price: data.price }),
     updatedBy: user.authId,
   };
 
@@ -139,7 +143,7 @@ const updateCategory = async (req) => {
 const deleteCategory = async (payload) => {
   // const {categoryId} = req.params.id;
   // validateFields(payload, ["categoryId"]);
-  const {categoryId} = payload;
+  const { categoryId } = payload;
   // console.log(categoryId);
 
   const category = await Category.findById(categoryId);
@@ -229,8 +233,8 @@ const updateSubcategory = async (req) => {
   // Check if name already exists (excluding current subcategory)
   if (data.name && data.name !== subcategory.name) {
     const nameExists = category.subcategories.some(
-      sub => sub.name.toLowerCase() === data.name.toLowerCase() && 
-             sub._id.toString() !== data.subcategoryId
+      sub => sub.name.toLowerCase() === data.name.toLowerCase() &&
+        sub._id.toString() !== data.subcategoryId
     );
     if (nameExists) {
       throw new ApiError(status.BAD_REQUEST, "Subcategory name already exists");
@@ -259,7 +263,7 @@ const deleteSubcategory = async (payload) => {
   const subcategoryIndex = category.subcategories.findIndex(
     sub => sub._id.toString() === subcategoryId
   );
-  
+
   if (subcategoryIndex === -1) {
     throw new ApiError(status.NOT_FOUND, 'Subcategory not found in the specified category');
   }
@@ -338,7 +342,7 @@ const getSubcategoriesByCategory = async (categoryId) => {
 // In category.service.js
 const toggleToFavorites = async (payload) => {
   const { authId, categoryId } = payload;
-  
+
   validateFields(payload, ["authId", "categoryId"]);
 
   // Validate ObjectId format
@@ -366,7 +370,7 @@ const toggleToFavorites = async (payload) => {
     // Remove from favorites
     user.favorites.categories.splice(existingIndex, 1);
     await user.save();
-    return { 
+    return {
       message: "Category removed from favorites",
       isFavorite: false
     };
@@ -376,7 +380,7 @@ const toggleToFavorites = async (payload) => {
       categoryId: category._id
     });
     await user.save();
-    return { 
+    return {
       message: "Category added to favorites",
       isFavorite: true
     };
@@ -387,7 +391,7 @@ const toggleToFavorites = async (payload) => {
 const getFavoriteCategories = async (authId) => {
   const user = await User.findOne({ authId: new mongoose.Types.ObjectId(authId) })
     .populate('favorites.categories.categoryId', 'name icon isActive');
-  
+
   if (!user) {
     throw new ApiError(status.NOT_FOUND, "User not found");
   }

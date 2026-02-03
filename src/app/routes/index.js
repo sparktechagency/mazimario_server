@@ -13,10 +13,12 @@ const NotificationRoutes = require("../module/notification/notification.routes")
 const ReviewRoutes = require("../module/review/review.routes")
 const ChatRoutes = require("../module/chat/conversation.router")
 const PhoneVerificationRoutes = require("../module/phoneVerification/phoneVerification.routes")
+const LeadRoutes = require("../module/lead/lead.routes");
 // const FeedbackRoutes = require("../module/feedback/feedback.routes");
 // const PostRoutes = require("../module/post/post.routes");
 // const SubscriptionPlanRoutes = require("../module/subscriptionPlan/subscriptionPlan.routes");
-// const PaymentRoutes = require("../module/payment/payment.routes");
+// const SubscriptionPlanRoutes = require("../module/subscriptionPlan/subscriptionPlan.routes");
+const PaymentRoutes = require("../module/payment/payment.routes");
 
 const moduleRoutes = [
   {
@@ -63,6 +65,10 @@ const moduleRoutes = [
     path: "/phone-verification",
     route: PhoneVerificationRoutes,
   },
+  {
+    path: "/leads",
+    route: LeadRoutes,
+  },
   // {
   //   path: "/dashboard",
   //   route: DashboardRoutes,
@@ -92,9 +98,13 @@ const moduleRoutes = [
   //   route: SubscriptionPlanRoutes,
   // },
   // {
-  //   path: "/payment",
-  //   route: PaymentRoutes,
+  //   path: "/subscription-plan",
+  //   route: SubscriptionPlanRoutes,
   // },
+  {
+    path: "/payment",
+    route: PaymentRoutes,
+  },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

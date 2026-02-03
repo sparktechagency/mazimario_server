@@ -14,7 +14,7 @@ const validateFields = require("../../../util/validateFields");
 const EmailHelpers = require("../../../util/emailHelpers");
 const Admin = require("../admin/Admin");
 const Provider = require("../provider/Provider");
-const {OAuth2Client} = require("google-auth-library");
+const { OAuth2Client } = require("google-auth-library");
 const client = new OAuth2Client(config.google.serverClientId);
 //need notification while new user or provider register....
 
@@ -219,23 +219,23 @@ const loginAccount = async (payload) => {
   switch (auth.role) {
     case EnumUserRole.SUPER_ADMIN:
       result = await SuperAdmin.findOne({ authId: auth._id })
-        .populate("authId")
+        .populate("authId", "-password")
         .lean();
       break;
     case EnumUserRole.ADMIN:
       result = await Admin.findOne({ authId: auth._id })
-        .populate("authId")
+        .populate("authId", "-password")
         .lean();
       console.log(result);
       break;
     case EnumUserRole.PROVIDER:
       result = await Provider.findOne({ authId: auth._id })
-        .populate("authId")
+        .populate("authId", "-password")
         .lean();
       break;
     default:
       result = await User.findOne({ authId: auth._id })
-        .populate("authId")
+        .populate("authId", "-password")
         .lean();
   }
 
@@ -393,8 +393,7 @@ const updateFieldsWithCron = async (check) => {
 
   if (result.modifiedCount > 0)
     logger.info(
-      `Removed ${result.modifiedCount} expired ${
-        check === "activation" ? "activation" : "verification"
+      `Removed ${result.modifiedCount} expired ${check === "activation" ? "activation" : "verification"
       } code`
     );
 };
@@ -465,16 +464,16 @@ const finalizeGoogleLogin = async (auth, userId) => {
   let profile;
   switch (auth.role) {
     case EnumUserRole.SUPER_ADMIN:
-      profile = await SuperAdmin.findOne({ authId: auth._id }).populate("authId").lean();
+      profile = await SuperAdmin.findOne({ authId: auth._id }).populate("authId", "-password").lean();
       break;
     case EnumUserRole.ADMIN:
-      profile = await Admin.findOne({ authId: auth._id }).populate("authId").lean();
+      profile = await Admin.findOne({ authId: auth._id }).populate("authId", "-password").lean();
       break;
     case EnumUserRole.PROVIDER:
-      profile = await Provider.findOne({ authId: auth._id }).populate("authId").lean();
+      profile = await Provider.findOne({ authId: auth._id }).populate("authId", "-password").lean();
       break;
     default:
-      profile = await User.findOne({ authId: auth._id }).populate("authId").lean();
+      profile = await User.findOne({ authId: auth._id }).populate("authId", "-password").lean();
   }
 
   const payload = {

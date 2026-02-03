@@ -94,6 +94,45 @@ const ProviderSchema = new Schema(
       type: String,
       default: null,
     },
+    // KYC/Business Verification
+    businessVerification: {
+      status: {
+        type: String,
+        enum: ["NOT_STARTED", "PENDING", "VERIFIED", "REJECTED"],
+        default: "NOT_STARTED"
+      },
+      businessName: String,
+      businessType: {
+        type: String,
+        enum: ["INDIVIDUAL", "LLC", "CORPORATION", "PARTNERSHIP"]
+      },
+      taxId: String, // Should be encrypted in real app
+      businessAddress: String,
+      businessPhone: String,
+      verifiedAt: Date,
+      documents: [{
+        type: { type: String }, // e.g., 'LICENSE', 'ID'
+        url: String
+      }]
+    },
+    // Payment Stats
+    totalLeadsPurchased: {
+      type: Number,
+      default: 0
+    },
+    totalSpentOnLeads: {
+      type: Number,
+      default: 0
+    },
+    totalServicesCompleted: {
+      type: Number,
+      default: 0
+    },
+    completionRate: {
+      type: Number,
+      default: 0
+    },
+
     pendingUpdates: {
       type: Schema.Types.Mixed,
       default: null,
