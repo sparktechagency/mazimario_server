@@ -1,97 +1,104 @@
-const twilio = require('twilio');
-require('dotenv').config();
+/**
+ * Standalone Twilio diagnostics script
+ * Run: node test-twilio.js
+ */
+require("dotenv").config();
+const twilio = require("twilio");
 
-console.log('🔍 Testing Twilio Configuration...\n');
+const SID = process.env.TWILIO_ACCOUNT_SID;
+const TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const FROM = process.env.TWILIO_PHONE_NUMBER;
+const MSG_SID = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
-// Check environment variables
-const requiredVars = {
-    'TWILIO_ACCOUNT_SID': process.env.TWILIO_ACCOUNT_SID,
-    'TWILIO_AUTH_TOKEN': process.env.TWILIO_AUTH_TOKEN,
-    'TWILIO_PHONE_NUMBER': process.env.TWILIO_PHONE_NUMBER,
-};
-
-let missingVars = [];
-for (const [key, value] of Object.entries(requiredVars)) {
-    if (!value) {
-        missingVars.push(key);
-        console.log(`❌ ${key}: Not set`);
-    } else {
-        // Mask sensitive data
-        const masked = key === 'TWILIO_AUTH_TOKEN'
-            ? '*'.repeat(value.length)
-            : value;
-        console.log(`✅ ${key}: ${masked}`);
-    }
-}
-
-if (missingVars.length > 0) {
-    console.error('\n❌ Missing environment variables:', missingVars.join(', '));
-    console.log('\n📝 Please add them to your .env file');
-    process.exit(1);
-}
-
-console.log('\n📱 Attempting to send test SMS...\n');
-
-const client = twilio(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_AUTH_TOKEN
+console.log("=== Twilio Credential Check ===");
+console.log(
+  "ACCOUNT_SID:",
+  SID
+    ? `${SID.slice(0, 6)}...${SID.slice(-4)} (length: ${SID.length})`
+    : "❌ MISSING"
 );
+console.log(
+  "AUTH_TOKEN: ",
+  TOKEN
+    ? `${TOKEN.slice(0, 4)}...${TOKEN.slice(-4)} (length: ${TOKEN.length})`
+    : "❌ MISSING"
+);
+console.log("PHONE_NUMBER:", FROM || "❌ MISSING");
+console.log(
+  "MSG_SERVICE_SID:",
+  MSG_SID ? `${MSG_SID.slice(0, 6)}...${MSG_SID.slice(-4)}` : "❌ MISSING"
+);
+console.log("================================\n");
 
-async function testTwilio() {
-    try {
-        // Get user input for phone number
-        const readline = require('readline').createInterface({
-            input: process.stdin,
-            output: process.stdout
-        });
-
-        readline.question('Enter your phone number (E.164 format, e.g., +1234567890): ', async (phoneNumber) => {
-            readline.close();
-
-            if (!phoneNumber.startsWith('+')) {
-                console.error('❌ Phone number must start with + (E.164 format)');
-                process.exit(1);
-            }
-
-            console.log(`\n📤 Sending test SMS to ${phoneNumber}...`);
-
-            const message = await client.messages.create({
-                body: 'Hello from mazimario_server! 🎉 Your Twilio integration is working correctly.',
-                from: process.env.TWILIO_PHONE_NUMBER,
-                to: phoneNumber
-            });
-
-            console.log('\n✅ SUCCESS! SMS sent successfully!');
-            console.log('Message SID:', message.sid);
-            console.log('Status:', message.status);
-            console.log('To:', message.to);
-            console.log('From:', message.from);
-            console.log('\n📱 Check your phone for the text message!');
-            console.log('\n🎊 Your Twilio integration is working perfectly!');
-        });
-
-    } catch (error) {
-        console.error('\n❌ ERROR sending SMS:');
-        console.error('Message:', error.message);
-        console.error('Code:', error.code);
-
-        // Helpful error messages
-        if (error.code === 21211) {
-            console.log('\n💡 TIP: Check that the "To" number is in E.164 format (+1234567890)');
-        } else if (error.code === 21606) {
-            console.log('\n💡 TIP: For trial accounts, verify the phone number in Twilio Console first');
-            console.log('   Go to: https://console.twilio.com/us1/develop/phone-numbers/manage/verified');
-        } else if (error.code === 20003) {
-            console.log('\n💡 TIP: Check your TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN');
-            console.log('   Make sure they are correct in your .env file');
-        } else if (error.code === 21614) {
-            console.log('\n💡 TIP: Check that TWILIO_PHONE_NUMBER is correct and SMS-enabled');
-            console.log('   Verify in: https://console.twilio.com/us1/develop/phone-numbers/manage/incoming');
-        }
-
-        console.log('\n📚 Check Twilio error codes: https://www.twilio.com/docs/api/errors');
-        process.exit(1);
-    }
+if (!SID || !TOKEN) {
+  console.error("❌ Missing credentials. Check your .env file.");
+  process.exit(1);
 }
 
-testTwilio();
+const client = twilio(SID, TOKEN);
+
+async function run() {
+  // Step 1: Verify credentials by fetching account info
+  console.log("Step 1: Verifying credentials...");
+  try {
+    const account = await client.api.accounts(SID).fetch();
+    console.log("✅ Credentials are VALID!");
+    console.log("   Account Name:", account.friendlyName);
+    console.log("   Account Status:", account.status);
+  } catch (err) {
+    console.error("❌ Credential verification FAILED:");
+    console.error("   Error Code:", err.code);
+    console.error("   Message:", err.message);
+    console.log(
+      "\n💡 Fix: Copy your Account SID and Auth Token character-by-character from:"
+    );
+    console.log("   https://console.twilio.com → API keys & tokens");
+    process.exit(1);
+  }
+
+  // Step 2: Send a test SMS using direct FROM number (bypassing Messaging Service)
+  console.log(
+    "\nStep 2: Sending test SMS to +8801767677517 (direct FROM number)..."
+  );
+  try {
+    const params = {
+      body: "Mazimario test SMS - if you receive this, Twilio is working!",
+      to: "+8801767677517",
+      from: FROM,
+    };
+
+    const msg = await client.messages.create(params);
+    console.log("✅ SMS sent successfully!");
+    console.log("   Message SID:", msg.sid);
+    console.log("   Status:", msg.status);
+  } catch (err) {
+    console.error("❌ SMS send FAILED (direct FROM):");
+    console.error("   Error Code:", err.code);
+    console.error("   Message:", err.message);
+    console.error("   More info:", err.moreInfo);
+  }
+
+  // Step 3: Try with Messaging Service SID
+  if (MSG_SID) {
+    console.log("\nStep 3: Sending test SMS using Messaging Service SID...");
+    try {
+      const params = {
+        body: "Mazimario test SMS via Messaging Service!",
+        to: "+8801767677517",
+        messagingServiceSid: MSG_SID,
+      };
+
+      const msg = await client.messages.create(params);
+      console.log("✅ SMS via Messaging Service sent successfully!");
+      console.log("   Message SID:", msg.sid);
+      console.log("   Status:", msg.status);
+    } catch (err) {
+      console.error("❌ SMS send FAILED (Messaging Service):");
+      console.error("   Error Code:", err.code);
+      console.error("   Message:", err.message);
+      console.error("   More info:", err.moreInfo);
+    }
+  }
+}
+
+run();

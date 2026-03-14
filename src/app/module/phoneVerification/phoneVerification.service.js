@@ -4,11 +4,14 @@ const User = require("../user/User");
 const Provider = require("../provider/Provider");
 const ApiError = require("../../../error/ApiError");
 const validateFields = require("../../../util/validateFields");
-const twilio = require('twilio');
+const twilio = require("twilio");
 const { createToken } = require("../../../util/jwtHelpers");
 const config = require("../../../config");
 
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 // In-memory rate limiting (consider using Redis in production)
 const rateLimitStore = new Map();
@@ -34,7 +37,7 @@ const checkRateLimit = (phoneNumber) => {
   }
 
   const requests = rateLimitStore.get(phoneNumber);
-  const recentRequests = requests.filter(time => now - time < windowMs);
+  const recentRequests = requests.filter((time) => now - time < windowMs);
 
   if (recentRequests.length >= limit) {
     return false;
@@ -61,15 +64,24 @@ const sendVerificationCode = async (payload) => {
   const { phoneNumber, userType = "USER", createAccount = false } = payload;
 
   if (!isValidPhoneNumber(phoneNumber)) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid phone number format. Use E.164 format (e.g., +1234567890)");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid phone number format. Use E.164 format (e.g., +1234567890)"
+    );
   }
 
   if (!checkRateLimit(phoneNumber)) {
-    throw new ApiError(status.TOO_MANY_REQUESTS, "Too many verification requests. Please try again later.");
+    throw new ApiError(
+      status.TOO_MANY_REQUESTS,
+      "Too many verification requests. Please try again later."
+    );
   }
 
   if (!["USER", "PROVIDER"].includes(userType)) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid userType. Must be USER or PROVIDER");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid userType. Must be USER or PROVIDER"
+    );
   }
 
   try {
@@ -80,7 +92,7 @@ const sendVerificationCode = async (payload) => {
         phoneNumber,
         role: userType,
         name: `User ${phoneNumber.slice(-4)}`,
-        email: `${phoneNumber.replace('+', '')}@phone.temp`,
+        email: `${phoneNumber.replace("+", "")}@phone.temp`,
         provider: "phone",
         isVerified: false,
         isPhoneVerified: false,
@@ -103,38 +115,28 @@ const sendVerificationCode = async (payload) => {
     }
 
     if (!auth) {
-      throw new ApiError(status.NOT_FOUND, "Account not found. Please register first or use createAccount option.");
+      throw new ApiError(
+        status.NOT_FOUND,
+        "Account not found. Please register first or use createAccount option."
+      );
     }
 
     if (auth.role !== userType) {
-      throw new ApiError(status.BAD_REQUEST, `This phone number is registered as ${auth.role}, not ${userType}`);
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `This phone number is registered as ${auth.role}, not ${userType}`
+      );
     }
 
-    const verificationCode = generateVerificationCode();
-    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000);
+    // [Twilio Verify] Send OTP — Twilio generates and delivers the code
+    console.log(`📱 Sending SMS to ${phoneNumber}...`);
+    await twilioClient.verify.v2
+      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+      .verifications.create({ to: phoneNumber, channel: "sms" });
 
-    // Bangladesh dev mode bypass
-    const isBangladesh = phoneNumber.startsWith('+880') || phoneNumber.startsWith('+88');
-    const isDevelopment = process.env.NODE_ENV === 'development' || process.env.ENABLE_DEV_SMS_BYPASS === 'true';
-
-    if (isBangladesh && isDevelopment) {
-      console.log("\n🇧🇩 ========== BANGLADESH DEV MODE ==========");
-      console.log("📱 Phone Number:", phoneNumber);
-      console.log("🔢 Verification Code:", verificationCode);
-      console.log("⏰ Expires:", verificationExpires.toLocaleString());
-      console.log("ℹ️  SMS sending bypassed in development mode");
-      console.log("💡 To enable real SMS, see BANGLADESH_SMS_SOLUTIONS.md");
-      console.log("============================================\n");
-    } else {
-      await twilioClient.messages.create({
-        body: `Your mazimario verification code is: ${verificationCode}. Valid for 10 minutes.`,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: phoneNumber,
-      });
-    }
-
-    auth.phoneVerificationCode = verificationCode;
-    auth.phoneVerificationExpires = verificationExpires;
+    // [Bypassed] Old manual OTP storage — Twilio Verify manages code/expiry internally
+    // auth.phoneVerificationCode = verificationCode;
+    // auth.phoneVerificationExpires = verificationExpires;
     auth.isPhoneVerified = false;
     await auth.save();
 
@@ -147,8 +149,13 @@ const sendVerificationCode = async (payload) => {
     if (error instanceof ApiError) {
       throw error;
     }
+    // Expose the real Twilio error message for debugging
+    const twilioMessage = error?.message || "Failed to send verification code";
     console.error("Send verification code error:", error);
-    throw new ApiError(status.INTERNAL_SERVER_ERROR, "Failed to send verification code");
+    throw new ApiError(
+      status.INTERNAL_SERVER_ERROR,
+      `SMS Error: ${twilioMessage}`
+    );
   }
 };
 
@@ -161,7 +168,10 @@ const verifyPhoneCode = async (payload) => {
   const { phoneNumber, code } = payload;
 
   if (!isValidPhoneNumber(phoneNumber)) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid phone number format. Use E.164 format (e.g., +1234567890)");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid phone number format. Use E.164 format (e.g., +1234567890)"
+    );
   }
 
   const auth = await Auth.findOne({ phoneNumber });
@@ -170,27 +180,29 @@ const verifyPhoneCode = async (payload) => {
     throw new ApiError(status.NOT_FOUND, "Phone number not found");
   }
 
-  if (!auth.phoneVerificationCode) {
-    throw new ApiError(status.BAD_REQUEST, "No verification code found. Please request a new code.");
-  }
+  // [Twilio Verify] Check OTP — replaces manual DB code comparison
+  const verifyResult = await twilioClient.verify.v2
+    .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+    .verificationChecks.create({ to: phoneNumber, code });
 
-  if (auth.phoneVerificationExpires < new Date()) {
-    throw new ApiError(status.BAD_REQUEST, "Verification code has expired. Please request a new code.");
-  }
-
-  if (auth.phoneVerificationCode !== code) {
+  if (verifyResult.status !== "approved") {
     throw new ApiError(status.BAD_REQUEST, "Invalid verification code");
   }
 
   auth.isPhoneVerified = true;
   auth.isActive = true;
   auth.isVerified = true;
-  auth.phoneVerificationCode = undefined;
-  auth.phoneVerificationExpires = undefined;
+  // [Bypassed] Old OTP fields — no longer stored, so nothing to clear
+  // auth.phoneVerificationCode = undefined;
+  // auth.phoneVerificationExpires = undefined;
   await auth.save();
 
   if (auth.role === "USER") {
-    await User.findOneAndUpdate({ authId: auth._id }, { phoneNumber: phoneNumber }, { new: true });
+    await User.findOneAndUpdate(
+      { authId: auth._id },
+      { phoneNumber: phoneNumber },
+      { new: true }
+    );
   }
 
   const accessToken = createToken(
@@ -230,7 +242,10 @@ const resendVerificationCode = async (payload) => {
   const { phoneNumber } = payload;
 
   if (!isValidPhoneNumber(phoneNumber)) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid phone number format. Use E.164 format (e.g., +1234567890)");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid phone number format. Use E.164 format (e.g., +1234567890)"
+    );
   }
 
   const auth = await Auth.findOne({ phoneNumber });
@@ -243,7 +258,11 @@ const resendVerificationCode = async (payload) => {
     throw new ApiError(status.BAD_REQUEST, "Phone number is already verified");
   }
 
-  return await sendVerificationCode({ phoneNumber, userType: auth.role, createAccount: false });
+  return await sendVerificationCode({
+    phoneNumber,
+    userType: auth.role,
+    createAccount: false,
+  });
 };
 
 /**
@@ -255,19 +274,43 @@ const phoneOnlyRegistration = async (payload) => {
   const { phoneNumber } = payload;
 
   if (!isValidPhoneNumber(phoneNumber)) {
-    throw new ApiError(status.BAD_REQUEST, "Invalid phone number format. Use E.164 format (e.g., +1234567890)");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid phone number format. Use E.164 format (e.g., +1234567890)"
+    );
   }
 
   let auth = await Auth.findOne({ phoneNumber });
 
   if (auth) {
-    if (auth.isPhoneVerified) {
-      throw new ApiError(status.CONFLICT, "This phone number is already registered and verified. Please login.");
+    // Check if the existing user is a USER
+    if (auth.role && auth.role !== "USER") {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `This phone number is registered as ${
+          auth.role
+        }. Please use the ${auth.role.toLowerCase()} specific login.`
+      );
     }
-    return await sendVerificationCode({ phoneNumber, userType: auth.role, createAccount: false });
+
+    if (auth.isPhoneVerified) {
+      throw new ApiError(
+        status.CONFLICT,
+        "This phone number is already registered and verified. Please login."
+      );
+    }
+    return await sendVerificationCode({
+      phoneNumber,
+      userType: auth.role,
+      createAccount: false,
+    });
   }
 
-  return await sendVerificationCode({ phoneNumber, userType: "USER", createAccount: true });
+  return await sendVerificationCode({
+    phoneNumber,
+    userType: "USER",
+    createAccount: true,
+  });
 };
 
 const PhoneVerificationService = {
