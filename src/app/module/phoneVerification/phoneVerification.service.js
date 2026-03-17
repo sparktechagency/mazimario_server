@@ -7,6 +7,7 @@ const validateFields = require("../../../util/validateFields");
 const twilio = require("twilio");
 const { createToken } = require("../../../util/jwtHelpers");
 const config = require("../../../config");
+const { jwtHelpers } = require("../../../util/jwtHelpers");
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -192,35 +193,46 @@ const verifyPhoneCode = async (payload) => {
   auth.isPhoneVerified = true;
   auth.isActive = true;
   auth.isVerified = true;
-  // [Bypassed] Old OTP fields — no longer stored, so nothing to clear
-  // auth.phoneVerificationCode = undefined;
-  // auth.phoneVerificationExpires = undefined;
   await auth.save();
 
+  // Look up linked profile (User or Provider) to get correct userId
+  let profile;
   if (auth.role === "USER") {
-    await User.findOneAndUpdate(
+    profile = await User.findOneAndUpdate(
       { authId: auth._id },
       { phoneNumber: phoneNumber },
       { new: true }
-    );
+    ).populate("authId", "-password").lean();
+  } else if (auth.role === "PROVIDER") {
+    profile = await Provider.findOne({ authId: auth._id })
+      .populate("authId", "-password")
+      .lean();
   }
 
-  const accessToken = createToken(
-    { _id: auth._id, role: auth.role, email: auth.email },
-    config.jwt.jwt_secret,
-    config.jwt.jwt_expire_in
+  // Build token payload consistent with rest of app (authId + userId)
+  const tokenPayload = {
+    authId: auth._id,
+    userId: profile ? profile._id : auth._id,
+    email: auth.email,
+    role: auth.role,
+  };
+
+  const accessToken = jwtHelpers.createToken(
+    tokenPayload,
+    config.jwt.secret,
+    config.jwt.expires_in
   );
 
-  const refreshToken = createToken(
-    { _id: auth._id, role: auth.role, email: auth.email },
-    config.jwt.jwt_refresh_secret,
-    config.jwt.jwt_refresh_expire_in
+  const refreshToken = jwtHelpers.createToken(
+    tokenPayload,
+    config.jwt.refresh_secret,
+    config.jwt.refresh_expires_in
   );
 
   return {
     message: "Phone number verified successfully",
     phoneNumber: phoneNumber,
-    auth: {
+    user: profile || {
       _id: auth._id,
       role: auth.role,
       name: auth.name,
@@ -294,10 +306,8 @@ const phoneOnlyRegistration = async (payload) => {
     }
 
     if (auth.isPhoneVerified) {
-      throw new ApiError(
-        status.CONFLICT,
-        "This phone number is already registered and verified. Please login."
-      );
+      // Already verified — send login OTP so user can log in seamlessly
+      return await phoneLogin({ phoneNumber });
     }
     return await sendVerificationCode({
       phoneNumber,
@@ -313,11 +323,68 @@ const phoneOnlyRegistration = async (payload) => {
   });
 };
 
+/**
+ * Phone login
+ */
+const phoneLogin = async (payload) => {
+  validateFields(payload, ["phoneNumber"]);
+
+  const { phoneNumber } = payload;
+
+  if (!isValidPhoneNumber(phoneNumber)) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Invalid phone number format. Use E.164 format (e.g., +1234567890)"
+    );
+  }
+
+  if (!checkRateLimit(phoneNumber)) {
+    throw new ApiError(
+      status.TOO_MANY_REQUESTS,
+      "Too many verification requests. Please try again later."
+    );
+  }
+
+  const auth = await Auth.findOne({ phoneNumber });
+
+  if (!auth) {
+    throw new ApiError(status.NOT_FOUND, "This phone number is not registered. Please sign up or login using email.");
+  }
+  
+  if (auth.isBlocked) {
+    throw new ApiError(status.FORBIDDEN, "You are blocked. Contact support");
+  }
+
+  try {
+    console.log(`📱 Sending login SMS to ${phoneNumber}...`);
+    await twilioClient.verify.v2
+      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+      .verifications.create({ to: phoneNumber, channel: "sms" });
+
+    return {
+      message: "Login verification code sent successfully",
+      phoneNumber: phoneNumber,
+      expiresIn: "10 minutes",
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    const twilioMessage = error?.message || "Failed to send verification code";
+    console.error("Send login verification code error:", error);
+    throw new ApiError(
+      status.INTERNAL_SERVER_ERROR,
+      `SMS Error: ${twilioMessage}`
+    );
+  }
+};
+
 const PhoneVerificationService = {
   sendVerificationCode,
   verifyPhoneCode,
   resendVerificationCode,
   phoneOnlyRegistration,
+  phoneLogin,
 };
 
 module.exports = { PhoneVerificationService };

@@ -70,11 +70,27 @@ const phoneOnlyRegistration = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Phone Login
+ * POST /phone-verification/phone-login
+ * Body: { phoneNumber }
+ */
+const phoneLogin = catchAsync(async (req, res) => {
+  const result = await PhoneVerificationService.phoneLogin(req.body);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Login code sent successfully",
+    data: result,
+  });
+});
+
 const PhoneVerificationController = {
   sendVerificationCode,
   verifyPhoneCode,
   resendVerificationCode,
   phoneOnlyRegistration,
+  phoneLogin,
 };
 
 module.exports = { PhoneVerificationController };

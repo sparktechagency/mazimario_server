@@ -14,6 +14,7 @@ const router = express.Router();
 
 router
   .post("/phone-only-register", PhoneVerificationController.phoneOnlyRegistration)
+  .post("/phone-login", PhoneVerificationController.phoneLogin)
   .post("/send-code", PhoneVerificationController.sendVerificationCode)
   .post("/verify-code", PhoneVerificationController.verifyPhoneCode)
   .post("/resend-code", PhoneVerificationController.resendVerificationCode);
