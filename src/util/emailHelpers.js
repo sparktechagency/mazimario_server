@@ -7,6 +7,20 @@ const { sendEmail } = require("./sendEmail");
 const addAdminEmailTemp = require("../mail/addAdminEmailTemp");
 // const bookingEmailTemp = require("../mail/bookingEmailTemp");
 const subscriptionExpiredTemp = require("../mail/subscriptionExpiredTemp");
+const emailOtpTemp = require("../mail/emailOtpTemp");
+
+const sendEmailOtp = async (email, data) => {
+  try {
+    await sendEmail({
+      email,
+      subject: "Your Verification Code",
+      html: emailOtpTemp(data),
+    });
+  } catch (error) {
+    console.log("Send OTP Error:", error);
+    throw new ApiError(status.INTERNAL_SERVER_ERROR, "Email was not sent");
+  }
+};
 
 const sendActivationEmail = async (email, data) => {
   try {
@@ -93,6 +107,7 @@ const EmailHelpers = {
   sendAddAdminEmailTemp,
   sendSubscriptionEmail,
   sendSubscriptionExpiredEmail,
+  sendEmailOtp,
 };
 
 module.exports = EmailHelpers;

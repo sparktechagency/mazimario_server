@@ -31,7 +31,7 @@ const AuthSchema = new Schema(
     },
     provider: {
       type: String,
-      enum: ["local", "google", "phone"],
+      enum: ["local", "google", "phone", "email_otp"],
       default: "local",
     },
 
