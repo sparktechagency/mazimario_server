@@ -10,16 +10,28 @@ const formattedDate = currentDate.toLocaleDateString("en-US", {
 });
 
 const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    host: config.smtp.smtp_host,
-    service: config.smtp.smtp_service,
-    port: parseInt(config.smtp.smtp_port),
-    secure: false, // true for port 465, false for other ports
-    auth: {
-      user: config.smtp.smtp_mail,
-      pass: config.smtp.smtp_password,
-    },
-  });
+  // Build transport config — do NOT set both `service` and `host` at the same time.
+  // If SMTP_SERVICE (e.g. "gmail") is set, Nodemailer uses it and ignores host/port.
+  // Otherwise, use explicit host + port.
+  const transportConfig = config.smtp.smtp_service
+    ? {
+        service: config.smtp.smtp_service, // e.g. "gmail"
+        auth: {
+          user: config.smtp.smtp_mail,
+          pass: config.smtp.smtp_password,
+        },
+      }
+    : {
+        host: config.smtp.smtp_host,
+        port: parseInt(config.smtp.smtp_port),
+        secure: parseInt(config.smtp.smtp_port) === 465, // true for 465, false for 587
+        auth: {
+          user: config.smtp.smtp_mail,
+          pass: config.smtp.smtp_password,
+        },
+      };
+
+  const transporter = nodemailer.createTransport(transportConfig);
 
   const { email, subject, html } = options;
 
