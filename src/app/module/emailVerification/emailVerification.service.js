@@ -14,12 +14,16 @@ const validator = require("validator");
 const rateLimitStore = new Map();
 
 /**
- * Check rate limiting for email
+ * Check rate limiting for email.
+ * Rules:
+ *  - Max 10 OTP sends per email per hour
+ *  - At least 60 seconds between consecutive sends
  */
 const checkRateLimit = (email) => {
   const now = Date.now();
-  const limit = 5; // 5 requests per hour max
-  const windowMs = 60 * 60 * 1000; // 1 hour
+  const limit = 10; // max OTP sends per hour
+  const windowMs = 60 * 60 * 1000; // 1 hour window
+  const cooldownMs = 60 * 1000; // 60 seconds between sends
 
   if (!rateLimitStore.has(email)) {
     rateLimitStore.set(email, []);
@@ -28,6 +32,15 @@ const checkRateLimit = (email) => {
   const requests = rateLimitStore.get(email);
   const recentRequests = requests.filter((time) => now - time < windowMs);
 
+  // Enforce cooldown: block if last request was less than 60s ago
+  if (recentRequests.length > 0) {
+    const lastRequest = recentRequests[recentRequests.length - 1];
+    if (now - lastRequest < cooldownMs) {
+      return false;
+    }
+  }
+
+  // Enforce hourly cap
   if (recentRequests.length >= limit) {
     return false;
   }
@@ -35,6 +48,13 @@ const checkRateLimit = (email) => {
   recentRequests.push(now);
   rateLimitStore.set(email, recentRequests);
   return true;
+};
+
+/**
+ * Clear rate limit for an email (call after successful verification)
+ */
+const clearRateLimit = (email) => {
+  rateLimitStore.delete(email);
 };
 
 /**
@@ -184,6 +204,9 @@ const verifyEmailOtp = async (payload) => {
   auth.activationCode = undefined;
   auth.activationCodeExpire = undefined;
   await auth.save();
+
+  // Clear rate limit after successful verification so the user can log in again freely
+  clearRateLimit(lowercaseEmail);
 
   // Find user profile
   let profile;

@@ -44,7 +44,7 @@ const registrationAccount = async (payload) => {
     user: name,
     activationCode,
     activationCodeExpire: Math.round(
-      (activationCodeExpire - Date.now()) / (60 * 1000)
+      (activationCodeExpire - Date.now()) / (3 * 60 * 1000)
     ),
   };
 
@@ -122,7 +122,7 @@ const resendActivationCode = async (payload) => {
   const data = {
     user: user.name,
     code: activationCode,
-    expiresIn: Math.round((activationCodeExpire - Date.now()) / (60 * 1000)),
+    expiresIn: Math.round((activationCodeExpire - Date.now()) / (3 * 60 * 1000)),
   };
 
   user.activationCode = activationCode;
@@ -277,7 +277,7 @@ const forgotPass = async (payload) => {
     name: user.name,
     verificationCode,
     verificationCodeExpire: Math.round(
-      (verificationCodeExpire - Date.now()) / (60 * 1000)
+      (verificationCodeExpire - Date.now()) / (3 * 60 * 1000)
     ),
   };
 
