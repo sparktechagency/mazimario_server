@@ -71,7 +71,7 @@ const sendEmailOtpInternal = async (auth, createNewCode = true) => {
   if (createNewCode) {
     // Generate new OTP
     const { code: activationCode, expiredAt: activationCodeExpire } = codeGenerator(10); // 10 minutes expiry
-    
+
     auth.activationCode = activationCode;
     auth.activationCodeExpire = activationCodeExpire;
     await auth.save();
@@ -81,7 +81,7 @@ const sendEmailOtpInternal = async (auth, createNewCode = true) => {
     user: auth.name || "",
     activationCode: auth.activationCode,
     activationCodeExpire: Math.round(
-      (auth.activationCodeExpire - Date.now()) / (60 * 1000)
+      (auth.activationCodeExpire - Date.now()) / (3 * 60 * 1000)
     ),
   };
 
@@ -91,7 +91,7 @@ const sendEmailOtpInternal = async (auth, createNewCode = true) => {
   return {
     message: "Email verification code sent successfully",
     email: auth.email,
-    expiresIn: "10 minutes",
+    expiresIn: "3 minutes",
   };
 };
 
@@ -175,7 +175,7 @@ const verifyEmailOtp = async (payload) => {
 
   const auth = await Auth.findOne({ email: lowercaseEmail });
   if (!auth) throw new ApiError(status.NOT_FOUND, "Account does not exist!");
-  
+
   if (!auth.activationCode) {
     throw new ApiError(
       status.NOT_FOUND,
@@ -314,7 +314,7 @@ const emailOnlyRegister = async (payload) => {
       // Already registered and active - send OTP to log in
       return await emailLogin({ email: lowercaseEmail });
     }
-    
+
     // Extant but inactive (OTP expired maybe) -> Resend it
     return await sendEmailOtp({
       email: lowercaseEmail,
