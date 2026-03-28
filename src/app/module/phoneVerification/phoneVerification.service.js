@@ -30,7 +30,7 @@ const isValidPhoneNumber = (phoneNumber) => {
  */
 const checkRateLimit = (phoneNumber) => {
   const now = Date.now();
-  const limit = 3;
+  const limit = 5;
   const windowMs = 60 * 60 * 1000; // 1 hour
 
   if (!rateLimitStore.has(phoneNumber)) {

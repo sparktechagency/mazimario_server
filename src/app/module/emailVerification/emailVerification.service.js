@@ -21,9 +21,9 @@ const rateLimitStore = new Map();
  */
 const checkRateLimit = (email) => {
   const now = Date.now();
-  const limit = 10; // max OTP sends per hour
+  const limit = 15; // max OTP sends per hour
   const windowMs = 60 * 60 * 1000; // 1 hour window
-  const cooldownMs = 60 * 1000; // 60 seconds between sends
+  const cooldownMs = 30 * 1000; // 30 seconds between sends
 
   if (!rateLimitStore.has(email)) {
     rateLimitStore.set(email, []);
