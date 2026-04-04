@@ -100,19 +100,20 @@ const resetPassword = catchAsync(async (req, res) => {
 
 const googleLogin = catchAsync(async (req, res) => {
   const result = await AuthService.googleLogin(req.body);
+  const { refreshToken, ...responseData } = result;
 
   const cookieOptions = {
     secure: config.env === "production",
     httpOnly: true,
   };
 
-  res.cookie("refreshToken", result.refreshToken, cookieOptions);
+  res.cookie("refreshToken", refreshToken, cookieOptions);
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "Login successful",
-    data: result,
+    message: "Log in successful",
+    data: responseData,
   });
 });
 

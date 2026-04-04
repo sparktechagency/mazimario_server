@@ -403,10 +403,17 @@ const hashPass = async (newPassword) => {
 };
 
 const googleLogin = async (payload) => {
-  const { idToken, provider } = payload;
+  const { idToken, provider, role } = payload;
 
   if (provider !== "google")
     throw new ApiError(status.BAD_REQUEST, "Invalid provider");
+
+  // Validate role — only USER and PROVIDER allowed via Google login
+  if (!role || ![EnumUserRole.USER, EnumUserRole.PROVIDER].includes(role))
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Role is required and must be USER or PROVIDER"
+    );
 
   // Verify Google Token
   let ticket;
@@ -428,15 +435,20 @@ const googleLogin = async (payload) => {
   // Check if auth exists
   let auth = await Auth.findOne({ email });
 
-  // If exists, login directly
+  // If exists, login directly (same flow as /login)
   if (auth) {
     if (auth.isBlocked)
       throw new ApiError(status.FORBIDDEN, "Your account is blocked");
+    if (!auth.isActive)
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Please activate your account then try to login"
+      );
 
     return await finalizeGoogleLogin(auth);
   }
 
-  // Create new auth for Google user
+  // Create new auth for Google user with the provided role
   auth = await Auth.create({
     name,
     email,
@@ -444,59 +456,74 @@ const googleLogin = async (payload) => {
     googleId,
     isActive: true,
     isVerified: true,
-    role: EnumUserRole.USER, // default role
+    role,
   });
 
-  // Create user (NOT admin/provider/super admin)
-  const userData = await User.create({
+  // Create the matching profile based on role
+  const profileData = {
     authId: auth._id,
     name,
     email,
-  });
+  };
 
-  return await finalizeGoogleLogin(auth, userData._id);
+  if (role === EnumUserRole.PROVIDER) {
+    await Provider.create(profileData);
+  } else {
+    await User.create(profileData);
+  }
+
+  return await finalizeGoogleLogin(auth);
 };
 
 
-// Helper to unify response
-const finalizeGoogleLogin = async (auth, userId) => {
-
-  let profile;
+// Helper to build the same response shape as /login
+const finalizeGoogleLogin = async (auth) => {
+  let result;
   switch (auth.role) {
     case EnumUserRole.SUPER_ADMIN:
-      profile = await SuperAdmin.findOne({ authId: auth._id }).populate("authId", "-password").lean();
+      result = await SuperAdmin.findOne({ authId: auth._id })
+        .populate("authId", "-password")
+        .lean();
       break;
     case EnumUserRole.ADMIN:
-      profile = await Admin.findOne({ authId: auth._id }).populate("authId", "-password").lean();
+      result = await Admin.findOne({ authId: auth._id })
+        .populate("authId", "-password")
+        .lean();
       break;
     case EnumUserRole.PROVIDER:
-      profile = await Provider.findOne({ authId: auth._id }).populate("authId", "-password").lean();
+      result = await Provider.findOne({ authId: auth._id })
+        .populate("authId", "-password")
+        .lean();
       break;
     default:
-      profile = await User.findOne({ authId: auth._id }).populate("authId", "-password").lean();
+      result = await User.findOne({ authId: auth._id })
+        .populate("authId", "-password")
+        .lean();
   }
 
-  const payload = {
+  const tokenPayload = {
     authId: auth._id,
-    userId: userId || profile._id,
+    userId: result._id,
     email: auth.email,
     role: auth.role,
   };
 
   const accessToken = jwtHelpers.createToken(
-    payload,
+    tokenPayload,
     config.jwt.secret,
     config.jwt.expires_in
   );
 
   const refreshToken = jwtHelpers.createToken(
-    payload,
+    tokenPayload,
     config.jwt.refresh_secret,
     config.jwt.refresh_expires_in
   );
 
+  // Return same shape as loginAccount: { user, accessToken }
+  // refreshToken is returned separately so the controller can set it as a cookie
   return {
-    user: profile,
+    user: result,
     accessToken,
     refreshToken,
   };

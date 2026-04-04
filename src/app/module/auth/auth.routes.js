@@ -22,4 +22,3 @@ router
   );
 
 module.exports = router;
- 
